@@ -1,0 +1,9 @@
+{
+  "appId": "com.avm.yonetim",
+  "appName": "AVM Yönetim",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  }
+}

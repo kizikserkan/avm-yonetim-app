@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Uygulamayı açan herkes (mağazalar + yönetim) "anonim" olarak
+    // otomatik giriş yapar. Bu kural, sadece uygulama üzerinden gelen
+    // (Anonymous Authentication ile giriş yapmış) istekleri kabul eder;
+    // internetten rastgele erişimi engeller.
+    //
+    // NOT: Bu basit bir başlangıç seviyesi güvenlik kuralıdır. Mağazalar
+    // teorik olarak birbirinin verisini görebilir (uygulama arayüzü bunu
+    // göstermez ama teknik olarak mümkündür). İleride her mağaza için
+    // ayrı giriş (Firebase Authentication + custom claims / Cloud
+    // Functions) eklenerek bu daha da sıkılaştırılabilir.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
