@@ -770,10 +770,13 @@ document.addEventListener("deviceready", function () {
   if (typeof ONESIGNAL_APP_ID === "undefined" || ONESIGNAL_APP_ID.startsWith("BURAYA")) return;
   try {
     window.plugins.OneSignal.initialize(ONESIGNAL_APP_ID);
+    window._oneSignalStep = "initialize tamam";
     window.plugins.OneSignal.Notifications.requestPermission(false);
+    window._oneSignalStep = "requestPermission tamam";
     window._oneSignalReady = true;
     App.tagPushRoleIfNeeded();
   } catch (e) {
+    window._oneSignalError = (e && e.message) ? e.message : String(e);
     console.error("OneSignal başlatılamadı:", e);
   }
 }, false);
@@ -785,7 +788,9 @@ setTimeout(function () {
   const info = "deviceready:" + (window._deviceReadyFired ? "EVET" : "HAYIR") +
     " | plugins:" + (window.plugins ? "VAR" : "YOK") +
     " | OneSignal:" + (window.plugins && window.plugins.OneSignal ? "VAR" : "YOK") +
-    " | hazır:" + (window._oneSignalReady ? "EVET" : "HAYIR");
+    " | hazır:" + (window._oneSignalReady ? "EVET" : "HAYIR") +
+    " | son adım:" + (window._oneSignalStep || "yok") +
+    " | hata:" + (window._oneSignalError || "yok");
   console.log("[OneSignal Tanı] " + info);
   const box = document.createElement("div");
   box.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font-size:12px;padding:10px;text-align:center;word-break:break-all;";
