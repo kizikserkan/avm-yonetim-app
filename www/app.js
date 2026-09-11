@@ -763,7 +763,9 @@ function closeModal() {
 /* OneSignal push bildirimleri — sadece native (APK) ortamında "deviceready"
    olayı tetiklenir, web'de (tarayıcı) hiçbir şey olmaz, bu normaldir. */
 window._oneSignalReady = false;
+window._deviceReadyFired = false;
 document.addEventListener("deviceready", function () {
+  window._deviceReadyFired = true;
   if (!window.plugins || !window.plugins.OneSignal) return;
   if (typeof ONESIGNAL_APP_ID === "undefined" || ONESIGNAL_APP_ID.startsWith("BURAYA")) return;
   try {
@@ -775,5 +777,17 @@ document.addEventListener("deviceready", function () {
     console.error("OneSignal başlatılamadı:", e);
   }
 }, false);
+
+/* GEÇİCİ TANI BİLDİRİMİ — sorunu bulmak için, 4 saniye sonra ekranda
+   OneSignal'ın durumunu gösteren bir uyarı çıkar. Sorun çözülünce bu
+   blok kaldırılacak. */
+setTimeout(function () {
+  const info = "deviceready:" + (window._deviceReadyFired ? "EVET" : "HAYIR") +
+    " | plugins:" + (window.plugins ? "VAR" : "YOK") +
+    " | OneSignal:" + (window.plugins && window.plugins.OneSignal ? "VAR" : "YOK") +
+    " | hazır:" + (window._oneSignalReady ? "EVET" : "HAYIR");
+  console.log("[OneSignal Tanı] " + info);
+  if (window.App && App.toast) App.toast(info, "error");
+}, 4000);
 
 App.init();
