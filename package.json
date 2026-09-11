@@ -1,16 +1,18 @@
 {
-  "name": "avm-yonetim-app",
+  "name": "afium-portal",
   "version": "1.0.0",
-  "description": "AVM Kiracı Yönetim Uygulaması - Arıza Bildirimi, Personel Bildirimi, Duyurular",
+  "description": "Afium Portal - Mağaza Arıza Bildirimi, Personel Bildirimi, Duyurular",
   "private": true,
   "scripts": {
     "start": "npx serve www"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",
-    "@capacitor/core": "^6.2.0"
+    "@capacitor/core": "^6.2.0",
+    "onesignal-cordova-plugin": "^5.5.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^6.2.0"
   }
 }
