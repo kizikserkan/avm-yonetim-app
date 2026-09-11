@@ -1,5 +1,5 @@
 /* =========================================================================
-   AVM Yönetim Uygulaması
+   Afium Portal
    Kiracı (mağaza) arıza bildirimi + personel bildirimi + yönetim duyuruları
    ========================================================================= */
 
@@ -46,7 +46,7 @@ const App = {
       this.tab = "magazalar";
       this.renderAdminShell();
     } else {
-      this.renderRoleSelect();
+      this.renderTenantLogin();
     }
   },
 
@@ -59,7 +59,7 @@ const App = {
     this.clearListeners();
     this.session = null;
     localStorage.removeItem("avm_session");
-    this.renderRoleSelect();
+    this.renderTenantLogin();
   },
 
   toast(msg, type) {
@@ -88,44 +88,20 @@ const App = {
   },
 
   /* ---------------------------------------------------------------- */
-  /* ROLE SELECT                                                       */
-  /* ---------------------------------------------------------------- */
-  renderRoleSelect() {
-    this.clearListeners();
-    this.el.innerHTML = `
-      <div class="shell">
-        <div class="topbar"><div class="title">🏬 AVM Yönetim</div></div>
-        <div class="content" style="padding-top:24px">
-          <div class="role-picker">
-            <button class="role-btn" onclick="App.renderTenantLogin()">
-              <span class="emoji">🏪</span>
-              <span>Mağaza Girişi<br><span style="font-weight:400;font-size:12px;color:var(--muted)">Arıza / personel bildirimi</span></span>
-              <span class="arrow">›</span>
-            </button>
-            <button class="role-btn" onclick="App.renderAdminLogin()">
-              <span class="emoji">🛠️</span>
-              <span>Yönetim Girişi<br><span style="font-weight:400;font-size:12px;color:var(--muted)">AVM yönetimi</span></span>
-              <span class="arrow">›</span>
-            </button>
-          </div>
-        </div>
-      </div>`;
-  },
-
-  /* ---------------------------------------------------------------- */
-  /* TENANT LOGIN                                                       */
+  /* TENANT LOGIN (ana giriş ekranı)                                    */
   /* ---------------------------------------------------------------- */
   renderTenantLogin() {
+    this.clearListeners();
     this.el.innerHTML = `
       <div class="auth-screen">
         <div class="auth-card">
-          <div class="auth-logo">🏪</div>
+          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
           <div class="auth-title">Mağaza Girişi</div>
           <div class="auth-sub">Yönetimin size verdiği mağaza kodu ve şifre ile giriş yapın</div>
           <div class="field"><label>Mağaza Kodu</label><input id="t-code" autocapitalize="characters" placeholder="Örn: M101" /></div>
           <div class="field"><label>Şifre (PIN)</label><input id="t-pin" type="password" inputmode="numeric" placeholder="••••" /></div>
           <button class="btn" onclick="App.tenantLogin()">Giriş Yap</button>
-          <button class="btn block-link" onclick="App.renderRoleSelect()">‹ Geri</button>
+          <button class="btn block-link staff-link" onclick="App.renderAdminLogin()">Yönetim / Teknik Girişi</button>
         </div>
       </div>`;
     document.getElementById("t-code").focus();
@@ -158,12 +134,12 @@ const App = {
     this.el.innerHTML = `
       <div class="auth-screen">
         <div class="auth-card">
-          <div class="auth-logo">🛠️</div>
+          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
           <div class="auth-title">Yönetim Girişi</div>
           <div class="auth-sub">AVM yönetim şifrenizi girin</div>
           <div class="field"><label>Şifre</label><input id="a-pw" type="password" placeholder="••••••" /></div>
           <button class="btn" onclick="App.adminLogin()">Giriş Yap</button>
-          <button class="btn block-link" onclick="App.renderRoleSelect()">‹ Geri</button>
+          <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Mağaza girişine dön</button>
         </div>
       </div>`;
     document.getElementById("a-pw").focus();
@@ -385,7 +361,7 @@ const App = {
     this.el.innerHTML = `
       <div class="shell">
         <div class="topbar">
-          <div><div class="title">AVM Yönetim</div><div class="sub">Yönetici Paneli</div></div>
+          <div><div class="title">Afium Portal</div><div class="sub">Yönetici Paneli</div></div>
           <button class="icon-btn" onclick="App.logout()">Çıkış</button>
         </div>
         <div class="content" id="admin-content"></div>

@@ -1,6 +1,6 @@
 :root {
-  --primary: #2952e3;
-  --primary-dark: #1e3fb8;
+  --primary: #92278f;
+  --primary-dark: #6e1d6c;
   --bg: #f4f6fb;
   --card: #ffffff;
   --text: #1a1f36;
@@ -37,12 +37,13 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: white;
-  background: linear-gradient(160deg, var(--primary), var(--primary-dark));
+  color: var(--text);
+  background: #ffffff;
 }
 .splash-logo { font-size: 56px; }
-.splash-title { font-size: 22px; font-weight: 700; }
-.splash-sub { font-size: 14px; opacity: 0.8; }
+.splash-logo-img { width: 140px; height: auto; margin-bottom: 8px; }
+.splash-title { font-size: 20px; font-weight: 700; color: var(--primary); }
+.splash-sub { font-size: 14px; opacity: 0.6; }
 
 /* Toast */
 .toast {
@@ -82,8 +83,10 @@ html, body {
   box-shadow: 0 20px 50px rgba(0,0,0,.2);
 }
 .auth-logo { text-align: center; font-size: 42px; margin-bottom: 4px; }
+.auth-logo-img { display: block; width: 110px; height: auto; margin: 0 auto 10px; }
 .auth-title { text-align: center; font-size: 20px; font-weight: 700; margin-bottom: 2px; }
 .auth-sub { text-align: center; font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+.staff-link { font-size: 12px; opacity: 0.7; }
 
 .role-picker {
   display: flex;
