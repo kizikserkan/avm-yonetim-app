@@ -101,6 +101,7 @@ const App = {
           <div class="field"><label>Mağaza Kodu</label><input id="t-code" autocapitalize="characters" placeholder="Örn: M101" /></div>
           <div class="field"><label>Şifre (PIN)</label><input id="t-pin" type="password" inputmode="numeric" placeholder="••••" /></div>
           <button class="btn" onclick="App.tenantLogin()">Giriş Yap</button>
+          <button class="btn block-link" onclick="App.openForgotPinForm()">Şifremi unuttum?</button>
           <button class="btn block-link staff-link" onclick="App.renderAdminLogin()">Yönetim / Teknik Girişi</button>
         </div>
       </div>`;
@@ -124,6 +125,59 @@ const App = {
     } catch (e) {
       console.error(e);
       this.toast("Giriş yapılamadı: " + e.message, "error");
+    }
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* ŞİFREMİ UNUTTUM (mağaza PIN sıfırlama - e-posta ile otomatik)     */
+  /* ---------------------------------------------------------------- */
+  openForgotPinForm() {
+    openModal(`
+      <h3>Şifremi Unuttum</h3>
+      <div class="auth-sub" style="text-align:left;margin-bottom:16px">Mağaza kodunuzu ve yönetime kayıtlı e-posta adresinizi girin; yeni şifreniz bu e-postaya gönderilsin.</div>
+      <div class="field"><label>Mağaza Kodu</label><input id="fp-code" autocapitalize="characters" placeholder="Örn: M101" /></div>
+      <div class="field"><label>Kayıtlı E-posta</label><input id="fp-email" type="email" placeholder="ornek@eposta.com" /></div>
+      <button class="btn" id="fp-submit-btn" onclick="App.submitForgotPin()">Yeni Şifre Gönder</button>
+    `);
+  },
+
+  async submitForgotPin() {
+    const code = document.getElementById("fp-code").value.trim().toUpperCase();
+    const email = document.getElementById("fp-email").value.trim().toLowerCase();
+    if (!code || !email) return this.toast("Lütfen mağaza kodu ve e-posta girin.", "error");
+    const btn = document.getElementById("fp-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Gönderiliyor…"; }
+    try {
+      const doc = await db.collection("stores").doc(code).get();
+      const data = doc.exists ? doc.data() : null;
+      const storedEmail = data && data.email ? String(data.email).trim().toLowerCase() : "";
+      if (!doc.exists || !storedEmail || storedEmail !== email) {
+        throw new Error("Mağaza kodu veya e-posta hatalı.");
+      }
+      const newPin = String(Math.floor(1000 + Math.random() * 9000));
+      await db.collection("stores").doc(code).update({ pin: newPin });
+      await db.collection("pinResets").add({
+        storeCode: code,
+        storeName: data.name || code,
+        email: storedEmail,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      if (window.emailjs && typeof EMAILJS_SERVICE_ID !== "undefined" && !EMAILJS_SERVICE_ID.startsWith("BURAYA")) {
+        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+          to_email: storedEmail,
+          store_name: data.name || code,
+          store_code: code,
+          new_pin: newPin
+        });
+      } else {
+        console.warn("EmailJS yapılandırılmamış — e-posta gönderilemedi. emailjs-config.js dosyasını doldurun.");
+      }
+      closeModal();
+      this.toast("Yeni şifreniz e-posta adresinize gönderildi.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast(e.message || "İşlem başarısız, tekrar deneyin.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "Yeni Şifre Gönder"; }
     }
   },
 
@@ -387,7 +441,11 @@ const App = {
 
   /* ---- Mağazalar ---- */
   adminStores(c) {
-    c.innerHTML = `<div class="section-title">Kayıtlı Mağazalar</div><div class="card" id="store-list"></div>`;
+    c.innerHTML = `
+      <div class="section-title">Kayıtlı Mağazalar</div>
+      <div class="card" id="store-list"></div>
+      <div class="section-title" style="margin-top:22px">Şifre Sıfırlama Talepleri</div>
+      <div id="pin-reset-list"></div>`;
     c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openStoreForm()">＋</button>`);
     const list = document.getElementById("store-list");
     const unsub = db.collection("stores").onSnapshot((snap) => {
@@ -396,16 +454,39 @@ const App = {
         return;
       }
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || "", "tr"));
+      this._storesData = docs;
       list.innerHTML = docs.map((s) => `
         <div class="list-item">
           <div>
             <div class="list-item-main">${escapeHtml(s.name)} <span style="color:var(--muted);font-weight:500">(${escapeHtml(s.id)})</span></div>
             <div class="list-item-sub">PIN: ${escapeHtml(String(s.pin))} ${s.phone ? " · " + escapeHtml(s.phone) : ""}</div>
+            <div class="list-item-sub">${s.email ? "✉️ " + escapeHtml(s.email) : "⚠️ E-posta tanımlı değil — şifre sıfırlama çalışmaz"}</div>
           </div>
-          <button class="icon-action danger" onclick="App.deleteStore('${s.id}')">Sil</button>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button class="icon-action" onclick="App.openEditStoreForm('${s.id}')">Düzenle</button>
+            <button class="icon-action danger" onclick="App.deleteStore('${s.id}')">Sil</button>
+          </div>
         </div>`).join("");
     }, (err) => { console.error(err); this.toast("Mağazalar yüklenemedi.", "error"); });
     this.unsubs.push(unsub);
+
+    const prList = document.getElementById("pin-reset-list");
+    const unsub2 = db.collection("pinResets").orderBy("createdAt", "desc").limit(20)
+      .onSnapshot((snap) => {
+        if (snap.empty) {
+          prList.innerHTML = `<div class="empty-state"><span class="emoji">🔑</span>Henüz şifre sıfırlama talebi olmadı.</div>`;
+          return;
+        }
+        prList.innerHTML = snap.docs.map((d) => {
+          const r = d.data();
+          return `<div class="card">
+            <div class="card-row"><div class="card-title">${escapeHtml(r.storeName || r.storeCode)}</div><span class="badge normal">${escapeHtml(r.storeCode)}</span></div>
+            <div class="card-body">✉️ ${escapeHtml(r.email || "-")}</div>
+            <div class="card-meta">${this.fmtDate(r.createdAt)}</div>
+          </div>`;
+        }).join("");
+      }, (err) => { console.error(err); });
+    this.unsubs.push(unsub2);
   },
 
   openStoreForm() {
@@ -415,6 +496,7 @@ const App = {
       <div class="field"><label>Mağaza Adı</label><input id="s-name" placeholder="Örn: ABC Giyim" /></div>
       <div class="field"><label>Giriş Şifresi (PIN)</label><input id="s-pin" placeholder="Örn: 1234" /></div>
       <div class="field"><label>Telefon (opsiyonel)</label><input id="s-phone" type="tel" placeholder="05xx xxx xx xx" /></div>
+      <div class="field"><label>E-posta (şifre sıfırlama için gerekli)</label><input id="s-email" type="email" placeholder="magaza@eposta.com" /></div>
       <button class="btn" onclick="App.submitStore()">Mağazayı Kaydet</button>
     `);
   },
@@ -424,10 +506,11 @@ const App = {
     const name = document.getElementById("s-name").value.trim();
     const pin = document.getElementById("s-pin").value.trim();
     const phone = document.getElementById("s-phone").value.trim();
+    const email = document.getElementById("s-email").value.trim().toLowerCase();
     if (!code || !name || !pin) return this.toast("Kod, ad ve şifre zorunludur.", "error");
     try {
       await db.collection("stores").doc(code).set({
-        code, name, pin, phone,
+        code, name, pin, phone, email,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       closeModal();
@@ -435,6 +518,36 @@ const App = {
     } catch (e) {
       console.error(e);
       this.toast("Kaydedilemedi: " + e.message, "error");
+    }
+  },
+
+  openEditStoreForm(id) {
+    const s = (this._storesData || []).find(x => x.id === id);
+    if (!s) return;
+    openModal(`
+      <h3>Mağazayı Düzenle</h3>
+      <div class="field"><label>Mağaza Kodu</label><input value="${escapeHtml(s.id)}" disabled /></div>
+      <div class="field"><label>Mağaza Adı</label><input id="es-name" value="${escapeHtml(s.name || "")}" /></div>
+      <div class="field"><label>Giriş Şifresi (PIN)</label><input id="es-pin" value="${escapeHtml(String(s.pin || ""))}" /></div>
+      <div class="field"><label>Telefon (opsiyonel)</label><input id="es-phone" type="tel" value="${escapeHtml(s.phone || "")}" /></div>
+      <div class="field"><label>E-posta (şifre sıfırlama için gerekli)</label><input id="es-email" type="email" value="${escapeHtml(s.email || "")}" /></div>
+      <button class="btn" onclick="App.submitEditStore('${s.id}')">Kaydet</button>
+    `);
+  },
+
+  async submitEditStore(id) {
+    const name = document.getElementById("es-name").value.trim();
+    const pin = document.getElementById("es-pin").value.trim();
+    const phone = document.getElementById("es-phone").value.trim();
+    const email = document.getElementById("es-email").value.trim().toLowerCase();
+    if (!name || !pin) return this.toast("Ad ve şifre zorunludur.", "error");
+    try {
+      await db.collection("stores").doc(id).update({ name, pin, phone, email });
+      closeModal();
+      this.toast("Mağaza güncellendi.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast("Güncellenemedi: " + e.message, "error");
     }
   },
 
