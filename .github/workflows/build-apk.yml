@@ -37,7 +37,7 @@ jobs:
           npx cap sync android
 
       - name: Uygulama ikonu ve açılış ekranını oluştur
-        run: npx capacitor-assets generate --android
+        run: npx @capacitor/assets generate --android
 
       - name: APK derle
         working-directory: android
