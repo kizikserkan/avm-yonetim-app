@@ -358,8 +358,8 @@ const App = {
           .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
         list.innerHTML = docs.map((p) => `
           <div class="card">
-            <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.position || "")}</span></div>
-            <div class="card-body">📞 ${escapeHtml(p.phone || "-")} &nbsp;·&nbsp; İşe başlama: ${escapeHtml(p.startDate || "-")}</div>
+            <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.tc || "-")}</span></div>
+            <div class="card-body">İşe başlama: ${escapeHtml(p.startDate || "-")}</div>
             ${p.note ? `<div class="card-body">${escapeHtml(p.note)}</div>` : ""}
             <div class="card-meta">${this.fmtDate(p.createdAt)}</div>
           </div>`).join("");
@@ -371,8 +371,7 @@ const App = {
     openModal(`
       <h3>Yeni Personel Bildirimi</h3>
       <div class="field"><label>Ad Soyad</label><input id="p-name" placeholder="Ad Soyad" /></div>
-      <div class="field"><label>Pozisyon</label><input id="p-pos" placeholder="Örn: Satış Danışmanı" /></div>
-      <div class="field"><label>Telefon</label><input id="p-phone" type="tel" placeholder="05xx xxx xx xx" /></div>
+      <div class="field"><label>T.C. Kimlik No</label><input id="p-tc" inputmode="numeric" maxlength="11" placeholder="11 haneli T.C. kimlik no" /></div>
       <div class="field"><label>İşe Başlama Tarihi</label><input id="p-date" type="date" /></div>
       <div class="field"><label>Not (opsiyonel)</label><textarea id="p-note" placeholder="Varsa ek bilgi..."></textarea></div>
       <button class="btn" onclick="App.submitPersonnel()">Bildirimi Gönder</button>
@@ -381,16 +380,16 @@ const App = {
 
   async submitPersonnel() {
     const fullName = document.getElementById("p-name").value.trim();
-    const position = document.getElementById("p-pos").value.trim();
-    const phone = document.getElementById("p-phone").value.trim();
+    const tc = document.getElementById("p-tc").value.trim();
     const startDate = document.getElementById("p-date").value;
     const note = document.getElementById("p-note").value.trim();
     if (!fullName) return this.toast("Lütfen ad soyad girin.", "error");
+    if (!/^\d{11}$/.test(tc)) return this.toast("Lütfen 11 haneli geçerli bir T.C. kimlik no girin.", "error");
     try {
       await db.collection("personnel").add({
         storeCode: this.session.storeCode,
         storeName: this.session.storeName,
-        fullName, position, phone, startDate, note,
+        fullName, tc, startDate, note,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       closeModal();
@@ -623,7 +622,7 @@ const App = {
       list.innerHTML = docs.map((p) => `
         <div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.storeName)}</span></div>
-          <div class="card-body">${escapeHtml(p.position || "")} · 📞 ${escapeHtml(p.phone || "-")} · Başlama: ${escapeHtml(p.startDate || "-")}</div>
+          <div class="card-body">T.C.: ${escapeHtml(p.tc || "-")} · Başlama: ${escapeHtml(p.startDate || "-")}</div>
           ${p.note ? `<div class="card-body">${escapeHtml(p.note)}</div>` : ""}
           <div class="card-meta">${this.fmtDate(p.createdAt)}</div>
         </div>`).join("");
