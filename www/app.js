@@ -778,16 +778,19 @@ document.addEventListener("deviceready", function () {
   }
 }, false);
 
-/* GEÇİCİ TANI BİLDİRİMİ — sorunu bulmak için, 4 saniye sonra ekranda
-   OneSignal'ın durumunu gösteren bir uyarı çıkar. Sorun çözülünce bu
-   blok kaldırılacak. */
+/* GEÇİCİ TANI BİLDİRİMİ — sorunu bulmak için, ekranın üstünde KALICI
+   (kaybolmayan) bir kutu içinde OneSignal'ın durumunu gösterir. Sorun
+   çözülünce bu blok kaldırılacak. */
 setTimeout(function () {
   const info = "deviceready:" + (window._deviceReadyFired ? "EVET" : "HAYIR") +
     " | plugins:" + (window.plugins ? "VAR" : "YOK") +
     " | OneSignal:" + (window.plugins && window.plugins.OneSignal ? "VAR" : "YOK") +
     " | hazır:" + (window._oneSignalReady ? "EVET" : "HAYIR");
   console.log("[OneSignal Tanı] " + info);
-  if (window.App && App.toast) App.toast(info, "error");
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font-size:12px;padding:10px;text-align:center;word-break:break-all;";
+  box.textContent = "[OneSignal Tanı] " + info;
+  document.body.appendChild(box);
 }, 4000);
 
 App.init();
