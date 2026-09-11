@@ -42,11 +42,22 @@ const App = {
     if (this.session && this.session.role === "tenant") {
       this.tab = "duyurular";
       this.renderTenantShell();
+      this.tagPushRoleIfNeeded();
     } else if (this.session && this.session.role === "admin") {
       this.tab = "magazalar";
       this.renderAdminShell();
     } else {
       this.renderTenantLogin();
+    }
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* PUSH BİLDİRİMLERİ (OneSignal) — sadece APK'de (native) çalışır    */
+  /* ---------------------------------------------------------------- */
+  tagPushRoleIfNeeded() {
+    if (!window._oneSignalReady || !window.plugins || !window.plugins.OneSignal) return;
+    if (this.session && this.session.role === "tenant") {
+      try { window.plugins.OneSignal.User.addTag("role", "tenant"); } catch (e) { console.warn(e); }
     }
   },
 
@@ -122,6 +133,7 @@ const App = {
       this.tab = "duyurular";
       this.toast("Hoş geldiniz, " + this.session.storeName, "success");
       this.renderTenantShell();
+      this.tagPushRoleIfNeeded();
     } catch (e) {
       console.error(e);
       this.toast("Giriş yapılamadı: " + e.message, "error");
@@ -678,8 +690,32 @@ const App = {
       });
       closeModal();
       this.toast("Duyuru yayınlandı.", "success");
+      this.sendAnnouncementPush(title, priority);
     } catch (e) {
       this.toast("Yayınlanamadı: " + e.message, "error");
+    }
+  },
+
+  async sendAnnouncementPush(title, priority) {
+    if (typeof ONESIGNAL_APP_ID === "undefined" || typeof ONESIGNAL_REST_API_KEY === "undefined") return;
+    if (ONESIGNAL_APP_ID.startsWith("BURAYA") || ONESIGNAL_REST_API_KEY.startsWith("BURAYA")) return;
+    try {
+      await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Authorization": "Key " + ONESIGNAL_REST_API_KEY
+        },
+        body: JSON.stringify({
+          app_id: ONESIGNAL_APP_ID,
+          target_channel: "push",
+          filters: [{ field: "tag", key: "role", relation: "=", value: "tenant" }],
+          headings: { en: priority === "Önemli" ? "📣 Önemli Duyuru" : "📣 Yeni Duyuru" },
+          contents: { en: title }
+        })
+      });
+    } catch (e) {
+      console.warn("Push bildirimi gönderilemedi:", e);
     }
   },
 
@@ -723,5 +759,21 @@ function closeModal() {
   const el = document.getElementById("modal-backdrop");
   if (el) el.remove();
 }
+
+/* OneSignal push bildirimleri — sadece native (APK) ortamında "deviceready"
+   olayı tetiklenir, web'de (tarayıcı) hiçbir şey olmaz, bu normaldir. */
+window._oneSignalReady = false;
+document.addEventListener("deviceready", function () {
+  if (!window.plugins || !window.plugins.OneSignal) return;
+  if (typeof ONESIGNAL_APP_ID === "undefined" || ONESIGNAL_APP_ID.startsWith("BURAYA")) return;
+  try {
+    window.plugins.OneSignal.initialize(ONESIGNAL_APP_ID);
+    window.plugins.OneSignal.Notifications.requestPermission(false);
+    window._oneSignalReady = true;
+    App.tagPushRoleIfNeeded();
+  } catch (e) {
+    console.error("OneSignal başlatılamadı:", e);
+  }
+}, false);
 
 App.init();
