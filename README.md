@@ -1,4 +1,4 @@
-# AVM Yönetim Uygulaması
+# Afium Portal
 
 Mağaza kiracılarının **arıza bildirimi** ve **yeni personel bildirimi**
 gönderebildiği, sizin (AVM yönetimi) tüm bildirimleri görüp **duyuru
@@ -101,7 +101,7 @@ gerçek bir `.apk` dosyasına derler.
 2. **"APK Oluştur"** adlı çalışmayı göreceksiniz (birkaç dakika sürer,
    sarı nokta biterse yeşil tik olur).
 3. Çalışma bitince üzerine tıklayın, en altta **"Artifacts"** bölümünde
-   **`avm-yonetim-apk`** dosyasını indirin. İndirdiğiniz `.zip`
+   **`afium-portal-apk`** dosyasını indirin. İndirdiğiniz `.zip`
    dosyasının içinden **`app-debug.apk`** çıkacak — işte kurulabilir
    uygulamanız bu.
 
@@ -125,6 +125,137 @@ gönderebilirsiniz.
    ile bu bilgilerle uygulamaya girip arıza/personel bildirimi yapabilir.
 4. **"Duyurular"** sekmesinden istediğiniz zaman tüm kiracıların anında
    göreceği bir duyuru yayınlayabilirsiniz.
+
+---
+
+## 7) "Şifremi unuttum" — e-posta ile otomatik PIN sıfırlama
+
+Mağaza giriş ekranında artık bir **"Şifremi unuttum?"** bağlantısı var.
+Kiracı, mağaza kodunu ve size verdiği e-posta adresini girdiğinde sistem
+otomatik olarak yeni bir PIN üretir, mağazanın kaydını günceller ve yeni
+şifreyi mağazanın e-postasına gönderir. Siz de yönetim panelindeki
+**"Mağazalar"** sekmesinin altında **"Şifre Sıfırlama Talepleri"**
+listesinden kimin ne zaman şifre sıfırladığını görebilirsiniz.
+
+Bunun çalışması için iki şey gerekir:
+
+**A) Her mağazaya bir e-posta tanımlayın:**
+Yönetim panelinde "Mağazalar" sekmesinde her kayıtta artık bir
+**"Düzenle"** butonu var — mevcut mağazalarınızı açıp e-posta adreslerini
+girin (e-postası olmayan mağazalarda uyarı görünür). Yeni eklediğiniz
+mağazalarda e-posta alanı doğrudan formda mevcut.
+
+**B) Ücretsiz bir EmailJS hesabı kurup bilgilerini projeye ekleyin:**
+1. https://www.emailjs.com adresinde ücretsiz kaydolun (ayda 200 e-posta
+   ücretsizdir, bu ölçek için fazlasıyla yeterli).
+2. Sol menüden **"Email Services"** > **"Add New Service"** ile kendi
+   Gmail/Outlook vb. hesabınızı bağlayın. Oluşan **Service ID**'yi not edin.
+3. **"Email Templates"** > **"Create New Template"** ile yeni bir şablon
+   oluşturun:
+   - **To Email** alanına `{{to_email}}` yazın.
+   - Konu/İçerik kısmına dilediğiniz metni yazıp içine `{{store_name}}`,
+     `{{store_code}}` ve `{{new_pin}}` değişkenlerini ekleyin. Örnek:
+     > Konu: Afium Portal - Yeni Şifreniz
+     > İçerik: Merhaba {{store_name}} ({{store_code}}), yeni giriş
+     > şifreniz: {{new_pin}}
+   - Oluşan **Template ID**'yi not edin.
+4. Sol üstten hesap adınıza tıklayıp **"Account"** > **"General"**
+   sayfasından **Public Key**'i kopyalayın.
+5. Bu depodaki **`www/emailjs-config.js`** dosyasını açıp üç
+   `BURAYA_...` değerini bu üç bilgiyle değiştirin, kaydedip GitHub'a
+   yükleyin (bkz. adım 3).
+
+Bu ayarları yapmadan önce "Şifremi unuttum" denenirse, PIN yine de
+sıfırlanır ve talep listede görünür, ama e-posta gönderilmez —
+tarayıcı konsolunda bir uyarı yazar. Ayarları girip yeniden dağıttıktan
+(GitHub'a push/upload) sonra e-postalar otomatik gitmeye başlar.
+
+---
+
+## 8) Duyuru push (anlık) bildirimleri — OneSignal + Cloudflare Worker
+
+Yönetim bir duyuru yayınladığında, mağaza uygulaması kurulu olan tüm
+telefonlara anlık bir bildirim gider (telefon kapalı/arka planda olsa
+bile bildirim çubuğunda görünür). Bu, OneSignal (ücretsiz, kart
+gerektirmeyen bir push bildirim servisi) ile kuruldu.
+
+Tarayıcılar güvenlik nedeniyle, gönderim anahtarını doğrudan OneSignal'a
+göndermemize izin vermiyor ("CORS" engeli). Bu yüzden aradan, isteği
+bizim yerimize ileten küçük ve **tamamen ücretsiz, kart istemeyen** bir
+"ara durak" geçirmemiz gerekiyor: **Cloudflare Workers**. Bunu bir kere
+kurup unutacaksınız — sonrasında hiçbir işlem gerekmez.
+
+### 8.1) Cloudflare hesabı açın
+
+1. https://dash.cloudflare.com/sign-up adresine gidin, e-posta ve şifre
+   ile ücretsiz hesap açın (kredi kartı istemez).
+2. E-postanıza gelen doğrulama bağlantısına tıklayın.
+
+### 8.2) Worker oluşturun
+
+1. Cloudflare panelinde sol menüden **Workers & Pages**'e girin.
+2. **Create** (veya **Create application** → **Workers** → **Create Worker**)
+   düğmesine basın.
+3. Worker'a bir isim verin, örneğin `afium-push`, **Deploy** deyin
+   (şimdilik varsayılan örnek kodla oluşsun, birazdan değiştireceğiz).
+4. Oluşan Worker'ın sayfasında **Edit code** (veya **</> Edit Code**)
+   düğmesine basın; karşınıza bir kod düzenleyici gelecek.
+5. Düzenleyicideki mevcut kodun tamamını silin, bu pakette gönderdiğim
+   `cloudflare-worker.js` dosyasının **tamamını** yapıştırın.
+6. Sağ üstten **Deploy** (veya **Save and Deploy**) deyin.
+
+### 8.3) Gizli anahtarları girin
+
+Worker'ın **Settings → Variables and Secrets** (bazı arayüzlerde
+**Settings → Variables**) kısmına girin ve şu üç değeri ekleyin
+(her biri için **Add variable/secret**):
+
+| İsim | Tür | Değer |
+|---|---|---|
+| `ONESIGNAL_APP_ID` | Text (düz metin olabilir) | `255154af-5c0f-4d11-9feb-0429d0c1d1cd` |
+| `ONESIGNAL_REST_API_KEY` | **Secret** (gizli) seçin | `os_v2_app_evivjl24b5grdh7laqu5bqorzxze6l5chlgehfm4vleewyujmbop6hlqblon7imnanllpdmupygjzkxr7je6wal2r2e7gksboaok27y` |
+| `PUSH_SECRET` | **Secret** (gizli) seçin | `ca6d8f91e5a8b432df2c994b63d2fd24895151ab0c34c99e` |
+
+Ekledikten sonra **Save/Deploy** deyip kaydedin.
+
+### 8.4) Worker adresini kopyalayın ve projeye ekleyin
+
+Worker sayfasının üstünde `https://afium-push.XXXXX.workers.dev` gibi bir
+adres göreceksiniz — bu, sizin Worker'ınızın adresidir, kopyalayın.
+
+`www/push-config.js` dosyasını açın ve şu satırı:
+
+```js
+const PUSH_PROXY_URL = "BURAYA_CLOUDFLARE_WORKER_ADRESI";
+```
+
+kopyaladığınız gerçek adresle değiştirin, örneğin:
+
+```js
+const PUSH_PROXY_URL = "https://afium-push.XXXXX.workers.dev";
+```
+
+`PUSH_SECRET` satırına dokunmayın — o değer zaten Worker'a girdiğinizle
+birebir aynı olacak şekilde önceden dolduruldu.
+
+Değişikliği kaydedip GitHub'a yükleyin, APK'nın (ve/veya web panelinin)
+yeniden oluşmasını bekleyin.
+
+### Bilinmesi gerekenler
+
+- Bu özellik sadece **APK'de** bildirim çubuğuna düşer; web panelinde
+  duyuru zaten listede anında güncellendiği için ayrıca push gerekmez.
+- Artık OneSignal'ın gönderim anahtarı (`REST API Key`) uygulama kodunda
+  DEĞİL, sadece Cloudflare'daki Worker'ın gizli ayarlarında duruyor —
+  öncekinden daha güvenli.
+- `PUSH_SECRET`, sadece sizin uygulamanızın bu Worker'ı kullanabilmesi
+  içindir; biri bunu ele geçirse bile yalnızca sahte bildirim
+  gönderebilir, başka verinize erişemez.
+- OneSignal panelinden (dashboard.onesignal.com → Delivery → Sent
+  Messages) gönderilen bildirimlerin geçmişini görebilirsiniz.
+- Cloudflare Workers ücretsiz planı günde 100.000 istek içerir — bir AVM
+  duyuru sistemi için fazlasıyla yeterlidir, kredi kartı hiçbir aşamada
+  istenmez.
 
 ---
 
