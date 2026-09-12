@@ -9,5 +9,5 @@
    Adım adım talimat için README.md dosyasındaki "Bölüm 8" kısmına bakın.
    ========================================================================= */
 
-const PUSH_PROXY_URL = "https://afium-push.kizikserkan.workers.dev"; // örn: https://afium-push.kullaniciadi.workers.dev
+const PUSH_PROXY_URL = "https://afium-push.kizikserkan.workers.dev";
 const PUSH_SECRET = "ca6d8f91e5a8b432df2c994b63d2fd24895151ab0c34c99e";
