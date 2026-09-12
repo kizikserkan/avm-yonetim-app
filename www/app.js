@@ -697,8 +697,8 @@ const App = {
   },
 
   async sendAnnouncementPush(title, priority) {
-    if (typeof ONESIGNAL_APP_ID === "undefined" || typeof ONESIGNAL_REST_API_KEY === "undefined") return;
-    if (ONESIGNAL_APP_ID.startsWith("BURAYA") || ONESIGNAL_REST_API_KEY.startsWith("BURAYA")) return;
+    if (typeof PUSH_PROXY_URL === "undefined" || typeof PUSH_SECRET === "undefined") return;
+    if (PUSH_PROXY_URL.startsWith("BURAYA") || PUSH_SECRET.startsWith("BURAYA")) return;
     const showPushDebug = (msg) => {
       console.log("[Push Tanı] " + msg);
       const box = document.createElement("div");
@@ -707,25 +707,20 @@ const App = {
       document.body.appendChild(box);
     };
     try {
-      const res = await fetch("https://onesignal.com/api/v1/notifications", {
+      const res = await fetch(PUSH_PROXY_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Authorization": "Key " + ONESIGNAL_REST_API_KEY
-        },
+        headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
-          app_id: ONESIGNAL_APP_ID,
-          target_channel: "push",
-          filters: [{ field: "tag", key: "role", relation: "=", value: "tenant" }],
-          headings: { en: priority === "Önemli" ? "📣 Önemli Duyuru" : "📣 Yeni Duyuru" },
-          contents: { en: title }
+          secret: PUSH_SECRET,
+          heading: priority === "Önemli" ? "📣 Önemli Duyuru" : "📣 Yeni Duyuru",
+          content: title
         })
       });
       let bodyText = "";
       try { bodyText = await res.text(); } catch (_) {}
       showPushDebug("HTTP " + res.status + " - " + bodyText);
     } catch (e) {
-      showPushDebug("HATA (muhtemelen CORS engeli): " + ((e && e.message) ? e.message : String(e)));
+      showPushDebug("HATA: " + ((e && e.message) ? e.message : String(e)));
     }
   },
 
