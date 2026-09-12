@@ -38,7 +38,7 @@ export default {
     }
 
     try {
-      const osRes = await fetch("https://onesignal.com/api/v1/notifications", {
+      const osRes = await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
