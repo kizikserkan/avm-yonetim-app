@@ -699,15 +699,8 @@ const App = {
   async sendAnnouncementPush(title, priority) {
     if (typeof PUSH_PROXY_URL === "undefined" || typeof PUSH_SECRET === "undefined") return;
     if (PUSH_PROXY_URL.startsWith("BURAYA") || PUSH_SECRET.startsWith("BURAYA")) return;
-    const showPushDebug = (msg) => {
-      console.log("[Push Tanı] " + msg);
-      const box = document.createElement("div");
-      box.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font-size:12px;padding:10px;text-align:center;word-break:break-all;max-height:40%;overflow:auto;";
-      box.textContent = "[Push Tanı] " + msg;
-      document.body.appendChild(box);
-    };
     try {
-      const res = await fetch(PUSH_PROXY_URL, {
+      await fetch(PUSH_PROXY_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
@@ -716,11 +709,8 @@ const App = {
           content: title
         })
       });
-      let bodyText = "";
-      try { bodyText = await res.text(); } catch (_) {}
-      showPushDebug("HTTP " + res.status + " - " + bodyText);
     } catch (e) {
-      showPushDebug("HATA: " + ((e && e.message) ? e.message : String(e)));
+      console.warn("Push bildirimi gönderilemedi:", e);
     }
   },
 
@@ -768,39 +758,17 @@ function closeModal() {
 /* OneSignal push bildirimleri — sadece native (APK) ortamında "deviceready"
    olayı tetiklenir, web'de (tarayıcı) hiçbir şey olmaz, bu normaldir. */
 window._oneSignalReady = false;
-window._deviceReadyFired = false;
 document.addEventListener("deviceready", function () {
-  window._deviceReadyFired = true;
   if (!window.plugins || !window.plugins.OneSignal) return;
   if (typeof ONESIGNAL_APP_ID === "undefined" || ONESIGNAL_APP_ID.startsWith("BURAYA")) return;
   try {
     window.plugins.OneSignal.initialize(ONESIGNAL_APP_ID);
-    window._oneSignalStep = "initialize tamam";
     window.plugins.OneSignal.Notifications.requestPermission(false);
-    window._oneSignalStep = "requestPermission tamam";
     window._oneSignalReady = true;
     App.tagPushRoleIfNeeded();
   } catch (e) {
-    window._oneSignalError = (e && e.message) ? e.message : String(e);
     console.error("OneSignal başlatılamadı:", e);
   }
 }, false);
-
-/* GEÇİCİ TANI BİLDİRİMİ — sorunu bulmak için, ekranın üstünde KALICI
-   (kaybolmayan) bir kutu içinde OneSignal'ın durumunu gösterir. Sorun
-   çözülünce bu blok kaldırılacak. */
-setTimeout(function () {
-  const info = "deviceready:" + (window._deviceReadyFired ? "EVET" : "HAYIR") +
-    " | plugins:" + (window.plugins ? "VAR" : "YOK") +
-    " | OneSignal:" + (window.plugins && window.plugins.OneSignal ? "VAR" : "YOK") +
-    " | hazır:" + (window._oneSignalReady ? "EVET" : "HAYIR") +
-    " | son adım:" + (window._oneSignalStep || "yok") +
-    " | hata:" + (window._oneSignalError || "yok");
-  console.log("[OneSignal Tanı] " + info);
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font-size:12px;padding:10px;text-align:center;word-break:break-all;";
-  box.textContent = "[OneSignal Tanı] " + info;
-  document.body.appendChild(box);
-}, 4000);
 
 App.init();
