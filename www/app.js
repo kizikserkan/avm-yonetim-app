@@ -46,6 +46,7 @@ const App = {
     } else if (this.session && this.session.role === "admin") {
       this.tab = "magazalar";
       this.renderAdminShell();
+      this.tagPushRoleIfNeeded();
     } else {
       this.renderTenantLogin();
     }
@@ -58,6 +59,8 @@ const App = {
     if (!window._oneSignalReady || !window.plugins || !window.plugins.OneSignal) return;
     if (this.session && this.session.role === "tenant") {
       try { window.plugins.OneSignal.User.addTag("role", "tenant"); } catch (e) { console.warn(e); }
+    } else if (this.session && this.session.role === "admin") {
+      try { window.plugins.OneSignal.User.addTag("role", "admin"); } catch (e) { console.warn(e); }
     }
   },
 
@@ -228,6 +231,7 @@ const App = {
       localStorage.setItem("avm_session", JSON.stringify(this.session));
       this.tab = "magazalar";
       this.renderAdminShell();
+      this.tagPushRoleIfNeeded();
     } catch (e) {
       console.error(e);
       this.toast("Giriş yapılamadı: " + e.message, "error");
@@ -350,9 +354,29 @@ const App = {
       });
       closeModal();
       this.toast("Arıza bildirimi gönderildi.", "success");
+      this.sendTicketPush(this.session.storeName, category);
     } catch (e) {
       console.error(e);
       this.toast("Gönderilemedi: " + e.message, "error");
+    }
+  },
+
+  async sendTicketPush(storeName, category) {
+    if (typeof PUSH_PROXY_URL === "undefined" || typeof PUSH_SECRET === "undefined") return;
+    if (PUSH_PROXY_URL.startsWith("BURAYA") || PUSH_SECRET.startsWith("BURAYA")) return;
+    try {
+      await fetch(PUSH_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({
+          secret: PUSH_SECRET,
+          role: "admin",
+          heading: "🔧 Yeni Arıza Bildirimi",
+          content: storeName + " — " + category
+        })
+      });
+    } catch (e) {
+      console.warn("Push bildirimi gönderilemedi:", e);
     }
   },
 
@@ -705,6 +729,7 @@ const App = {
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
           secret: PUSH_SECRET,
+          role: "tenant",
           heading: priority === "Önemli" ? "📣 Önemli Duyuru" : "📣 Yeni Duyuru",
           content: title
         })
