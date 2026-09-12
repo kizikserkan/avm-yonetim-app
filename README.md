@@ -259,6 +259,19 @@ yeniden oluşmasını bekleyin.
   duyuru sistemi için fazlasıyla yeterlidir, kredi kartı hiçbir aşamada
   istenmez.
 
+### Arıza bildirimi push'u (yönetime)
+
+Aynı altyapı, tersi yönde de çalışıyor: bir mağaza **arıza bildirimi**
+gönderdiğinde, "Yönetim" girişini kullanan cihazlara da anlık bir bildirim
+gider (📣 yerine 🔧 ikonuyla, mağaza adı ve kategori bilgisiyle).
+
+**Önemli:** bu bildirimin yönetime düşmesi için, yönetimi kullanan
+telefonda **APK içinde "Yönetim" girişiyle en az bir kez oturum açılmış**
+olması gerekir (bildirim izni o an istenir ve cihaz "admin" olarak
+etiketlenir). Sadece bilgisayardan web panelini kullanıyorsanız push
+bildirimi almazsınız — ama arıza, panel açıkken zaten anlık olarak listeye
+düşer, ayrıca push'a ihtiyaç yoktur.
+
 ---
 
 ## Güncelleme yapmak isterseniz
