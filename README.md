@@ -213,30 +213,32 @@ Worker'ın **Settings → Variables and Secrets** (bazı arayüzlerde
 | İsim | Tür | Değer |
 |---|---|---|
 | `ONESIGNAL_APP_ID` | Text (düz metin olabilir) | `255154af-5c0f-4d11-9feb-0429d0c1d1cd` |
-| `ONESIGNAL_REST_API_KEY` | **Secret** (gizli) seçin | `os_v2_app_evivjl24b5grdh7laqu5bqorzxze6l5chlgehfm4vleewyujmbop6hlqblon7imnanllpdmupygjzkxr7je6wal2r2e7gksboaok27y` |
+| `ONESIGNAL_REST_API_KEY` | **Secret** (gizli) seçin | OneSignal → Settings → Keys & IDs → API Keys altında **"+ Add key"** ile oluşturduğunuz anahtarın değeri (`os_v2_app_...` ile başlar). **Önemli:** bu değer sadece oluşturulduğu an bir kere gösterilir, sonra bir daha görüntülenemez — kaybederseniz eskisini silip yenisini oluşturmanız gerekir. |
 | `PUSH_SECRET` | **Secret** (gizli) seçin | `ca6d8f91e5a8b432df2c994b63d2fd24895151ab0c34c99e` |
 
-Ekledikten sonra **Save/Deploy** deyip kaydedin.
+Ekledikten sonra **Save/Deploy** deyip kaydedin, sonra **"Edit code"**
+sekmesine girip (koda dokunmadan) tekrar **Deploy** deyin — değişkenlerin
+gerçekten devreye girmesi için bu ikinci deploy gerekiyor.
+
+**Not:** Eski ("Legacy API Key") anahtar burada işe yaramaz — Worker,
+`https://api.onesignal.com/notifications` adresini kullanıyor ve bu adres
+sadece yeni tip (`os_v2_app_...`) anahtarlarla çalışıyor.
 
 ### 8.4) Worker adresini kopyalayın ve projeye ekleyin
 
-Worker sayfasının üstünde `https://afium-push.XXXXX.workers.dev` gibi bir
-adres göreceksiniz — bu, sizin Worker'ınızın adresidir, kopyalayın.
+Worker'ınızın adresi: `https://afium-push.kizikserkan.workers.dev`
+(Worker sayfasının üstünde de görebilirsiniz.)
 
-`www/push-config.js` dosyasını açın ve şu satırı:
-
-```js
-const PUSH_PROXY_URL = "BURAYA_CLOUDFLARE_WORKER_ADRESI";
-```
-
-kopyaladığınız gerçek adresle değiştirin, örneğin:
+`www/push-config.js` dosyası şu şekilde olmalı:
 
 ```js
-const PUSH_PROXY_URL = "https://afium-push.XXXXX.workers.dev";
+const PUSH_PROXY_URL = "https://afium-push.kizikserkan.workers.dev";
+const PUSH_SECRET = "ca6d8f91e5a8b432df2c994b63d2fd24895151ab0c34c99e";
 ```
 
-`PUSH_SECRET` satırına dokunmayın — o değer zaten Worker'a girdiğinizle
-birebir aynı olacak şekilde önceden dolduruldu.
+Bu proje zaten bu ayarlarla kurulu ve **çalışır durumda** — yukarıdaki
+adımlar sadece ileride yeni bir OneSignal anahtarı oluşturmanız gerekirse
+(örn. mevcut anahtar kaybolur/silinirse) referans içindir.
 
 Değişikliği kaydedip GitHub'a yükleyin, APK'nın (ve/veya web panelinin)
 yeniden oluşmasını bekleyin.
