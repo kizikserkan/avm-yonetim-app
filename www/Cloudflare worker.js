@@ -37,6 +37,8 @@ export default {
       return new Response(JSON.stringify({ error: "Yetkisiz istek." }), { status: 401, headers: cors });
     }
 
+    const targetRole = (body.role === "admin") ? "admin" : "tenant";
+
     try {
       const osRes = await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
@@ -47,7 +49,7 @@ export default {
         body: JSON.stringify({
           app_id: env.ONESIGNAL_APP_ID,
           target_channel: "push",
-          filters: [{ field: "tag", key: "role", relation: "=", value: "tenant" }],
+          filters: [{ field: "tag", key: "role", relation: "=", value: targetRole }],
           headings: { en: body.heading || "📣 Duyuru" },
           contents: { en: body.content || "" }
         })
