@@ -699,8 +699,15 @@ const App = {
   async sendAnnouncementPush(title, priority) {
     if (typeof ONESIGNAL_APP_ID === "undefined" || typeof ONESIGNAL_REST_API_KEY === "undefined") return;
     if (ONESIGNAL_APP_ID.startsWith("BURAYA") || ONESIGNAL_REST_API_KEY.startsWith("BURAYA")) return;
+    const showPushDebug = (msg) => {
+      console.log("[Push Tanı] " + msg);
+      const box = document.createElement("div");
+      box.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font-size:12px;padding:10px;text-align:center;word-break:break-all;max-height:40%;overflow:auto;";
+      box.textContent = "[Push Tanı] " + msg;
+      document.body.appendChild(box);
+    };
     try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
+      const res = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
@@ -714,8 +721,11 @@ const App = {
           contents: { en: title }
         })
       });
+      let bodyText = "";
+      try { bodyText = await res.text(); } catch (_) {}
+      showPushDebug("HTTP " + res.status + " - " + bodyText);
     } catch (e) {
-      console.warn("Push bildirimi gönderilemedi:", e);
+      showPushDebug("HATA (muhtemelen CORS engeli): " + ((e && e.message) ? e.message : String(e)));
     }
   },
 
