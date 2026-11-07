@@ -23,7 +23,7 @@ Toplam süre: ~20-30 dakika (çoğu bekleme).
   verirsiniz; kiracı bunları kullanıcı adı/şifre olarak girer. Arıza
   bildirir, yeni personel bildirir, sizin yayınladığınız duyuruları
   görür.
-- **Yönetim girişi:** Kullanıcı adı olarak `yonetim` yazıp kendi
+- **Yönetim girişi:** Kullanıcı adı olarak `yonetim` veya `admin` yazıp kendi
   şifrenizle girersiniz; tüm mağazaların arıza taleplerini görür,
   durumlarını (Açık / İşlemde / Çözüldü) güncellersiniz, personel
   bildirimlerini görür, mağaza ekler/silersiniz ve **duyuru
@@ -123,7 +123,7 @@ gönderebilirsiniz.
 ## 6) İlk kullanım
 
 1. Uygulamayı açın, giriş ekranında **Kullanıcı Adı** alanına `yonetim`
-   yazın, **Şifre** alanına istediğiniz bir şifre girin — **ilk girişte
+   (veya `admin`) yazın, **Şifre** alanına istediğiniz bir şifre girin — **ilk girişte
    yazdığınız şifre kalıcı yönetici şifreniz olarak kaydedilir.** Bu
    şifreyi bir yere not edin. (Ardından 2FA kurulumu istenir, bkz.
    aşağıdaki "İki aşamalı doğrulama" bölümü.)
