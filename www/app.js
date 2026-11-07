@@ -44,7 +44,7 @@ const App = {
       this.renderTenantShell();
       this.tagPushRoleIfNeeded();
     } else if (this.session && this.session.role === "admin") {
-      this.tab = "magazalar";
+      this.tab = "anasayfa";
       this.renderAdminShell();
       this.tagPushRoleIfNeeded();
     } else if (this.session && this.session.role === "teknisyen") {
@@ -372,7 +372,7 @@ const App = {
   completeAdminLogin() {
     this.session = { role: "admin" };
     localStorage.setItem("avm_session", JSON.stringify(this.session));
-    this.tab = "magazalar";
+    this.tab = "anasayfa";
     this.renderAdminShell();
     this.tagPushRoleIfNeeded();
   },
@@ -616,6 +616,7 @@ const App = {
   renderAdminShell() {
     this.clearListeners();
     const tabs = [
+      { key: "anasayfa", ic: "🏠", label: "Ana Sayfa" },
       { key: "magazalar", ic: "🏪", label: "Mağazalar" },
       { key: "arizalar", ic: "🔧", label: "Arızalar" },
       { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
@@ -676,11 +677,33 @@ const App = {
 
   renderAdminTab() {
     const c = document.getElementById("admin-content");
-    if (this.tab === "magazalar") this.adminStores(c);
+    if (this.tab === "anasayfa") this.adminHome(c);
+    else if (this.tab === "magazalar") this.adminStores(c);
     else if (this.tab === "arizalar") this.adminTickets(c);
     else if (this.tab === "magazaPersonel") this.adminMagazaPersonelTab(c);
     else if (this.tab === "teknikPersonel") this.adminTeknikPersonelTab(c);
     else if (this.tab === "duyurular") this.adminAnnouncements(c);
+  },
+
+  /* ---- Ana Sayfa (bottom nav'daki bölümlerin büyük kare ikonlarla
+     gösterildiği karşılama ekranı) ---- */
+  adminHome(c) {
+    const tiles = [
+      { key: "magazalar", ic: "🏪", label: "Mağazalar" },
+      { key: "arizalar", ic: "🔧", label: "Arızalar" },
+      { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
+      { key: "teknikPersonel", ic: "👷", label: "Teknik Personel" },
+      { key: "duyurular", ic: "📣", label: "Duyurular" }
+    ];
+    c.innerHTML = `
+      <div class="section-title">Hoş geldiniz</div>
+      <div class="home-grid">
+        ${tiles.map(t => `
+          <button class="home-tile" onclick="App.setAdminTab('${t.key}')">
+            <span class="home-tile-ic">${t.ic}</span>
+            <span class="home-tile-label">${t.label}</span>
+          </button>`).join("")}
+      </div>`;
   },
 
   /* ---- Mağazalar ---- */
