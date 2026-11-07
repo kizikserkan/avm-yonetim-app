@@ -14,13 +14,20 @@ Toplam süre: ~20-30 dakika (çoğu bekleme).
 
 ## Genel bakış — nasıl çalışıyor?
 
+- **Tek giriş ekranı:** Uygulamada artık tek bir "Kullanıcı Adı" / "Şifre"
+  ekranı var — mağaza, teknik personel ve Yönetim hepsi aynı ekrandan
+  giriş yapar, kim olduğunuzu sistem girdiğiniz kullanıcı adından
+  otomatik anlar (ayrı "Mağaza Girişi" / "Yönetim Girişi" butonlarına
+  gerek kalmadı).
 - **Mağaza girişi:** Her kiracıya bir "mağaza kodu" ve "şifre (PIN)"
-  verirsiniz. Kiracı bu bilgilerle uygulamaya girer; arıza bildirir,
-  yeni personel bildirir, sizin yayınladığınız duyuruları görür.
-- **Yönetim girişi:** Siz kendi şifrenizle girersiniz; tüm mağazaların
-  arıza taleplerini görür, durumlarını (Açık / İşlemde / Çözüldü)
-  güncellersiniz, personel bildirimlerini görür, mağaza ekler/silersiniz
-  ve **duyuru yayınlarsınız**.
+  verirsiniz; kiracı bunları kullanıcı adı/şifre olarak girer. Arıza
+  bildirir, yeni personel bildirir, sizin yayınladığınız duyuruları
+  görür.
+- **Yönetim girişi:** Kullanıcı adı olarak `yonetim` yazıp kendi
+  şifrenizle girersiniz; tüm mağazaların arıza taleplerini görür,
+  durumlarını (Açık / İşlemde / Çözüldü) güncellersiniz, personel
+  bildirimlerini görür, mağaza ekler/silersiniz ve **duyuru
+  yayınlarsınız**.
 - Veriler **Firebase (Google'ın ücretsiz bulut veritabanı)** üzerinde
   saklanır — böylece herkesin gördüğü veriler anlık olarak güncellenir.
 - Uygulama, **GitHub Actions** adında ücretsiz bir servis kullanılarak
@@ -115,14 +122,17 @@ gönderebilirsiniz.
 
 ## 6) İlk kullanım
 
-1. Uygulamayı açın, **"Yönetim Girişi"**ni seçin, istediğiniz bir şifre
-   girin — **ilk girişte yazdığınız şifre kalıcı yönetici şifreniz
-   olarak kaydedilir.** Bu şifreyi bir yere not edin.
+1. Uygulamayı açın, giriş ekranında **Kullanıcı Adı** alanına `yonetim`
+   yazın, **Şifre** alanına istediğiniz bir şifre girin — **ilk girişte
+   yazdığınız şifre kalıcı yönetici şifreniz olarak kaydedilir.** Bu
+   şifreyi bir yere not edin. (Ardından 2FA kurulumu istenir, bkz.
+   aşağıdaki "İki aşamalı doğrulama" bölümü.)
 2. Yönetici panelinde **"Mağazalar"** sekmesinden **+** ile her kiracı
    için bir **mağaza kodu** (örn. `M101`) ve **şifre (PIN)** (örn.
    `1234`) tanımlayın.
-3. Bu kod ve PIN'i ilgili kiracıya iletin — kiracı **"Mağaza Girişi"**
-   ile bu bilgilerle uygulamaya girip arıza/personel bildirimi yapabilir.
+3. Bu kod ve PIN'i ilgili kiracıya iletin — kiracı aynı giriş ekranından
+   **Kullanıcı Adı** olarak mağaza kodunu, **Şifre** olarak PIN'ini
+   girip arıza/personel bildirimi yapabilir.
 4. **"Duyurular"** sekmesinden istediğiniz zaman tüm kiracıların anında
    göreceği bir duyuru yayınlayabilirsiniz.
 
@@ -274,15 +284,16 @@ düşer, ayrıca push'a ihtiyaç yoktur.
 
 ### Teknik Ekip Girişi
 
-Mağaza giriş ekranındaki "Yönetim Girişi" butonunun yanına, aynı görünümde
-ayrı bir **"Teknik Ekip Girişi"** butonu eklendi. Bu, bakım/teknik ekibin
-kullanacağı, Yönetim'den tamamen ayrı ve daha sınırlı bir giriştir:
+Teknik ekip, ayrı bir buton/ekran değil, **aynı tek giriş ekranından**
+kendi kullanıcı adı ve şifresiyle girer — sistem, girilen kullanıcı
+adının bir teknik personel kaydı olduğunu otomatik tanır ve Yönetim'den
+tamamen ayrı, daha sınırlı bir panele yönlendirir:
 
 - Ortak bir şifre değil, **her teknik personelin kendi kullanıcı adı ve
-  şifresi** var. Bu hesaplar Yönetim panelindeki **Personel → Teknik
-  Personel** sekmesinden eklenir/düzenlenir/silinir (ad soyad, kullanıcı
-  adı, şifre, telefon, işe başlama tarihi, not). Şifresini unutan bir
-  teknik personel için buradan şifresini görüp değiştirebilirsiniz.
+  şifresi** var. Bu hesaplar Yönetim panelindeki **Teknik Personel**
+  sekmesinden eklenir/düzenlenir/silinir (ad soyad, kullanıcı adı,
+  şifre, telefon, işe başlama tarihi, not). Şifresini unutan bir teknik
+  personel için buradan şifresini görüp değiştirebilirsiniz.
 - Bir teknik personel "✓ Yapıldı" dediğinde veya not eklediğinde, bu
   işlemi kimin yaptığı ("İşlemi yapan: ...") arıza kartında hem mağazaya
   hem Yönetime görünür — kim neyi çözmüş takip edilebilir.
