@@ -99,6 +99,50 @@ const App = {
       " " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
   },
 
+  /* ---------------------------------------------------------------- */
+  /* T.C. Kimlik No gizleme yardımcıları — hem form alanlarında yazarken
+     hem de listelerde görüntülenirken T.C. no varsayılan olarak gizli
+     tutulur; "göster" butonuyla birkaç saniyeliğine açılır, sonra kendi
+     kendine tekrar gizlenir.                                          */
+  /* ---------------------------------------------------------------- */
+  tcInputField(id, value) {
+    return `<div class="field"><label>T.C. Kimlik No</label>
+      <div class="tc-input-wrap">
+        <input id="${id}" type="password" inputmode="numeric" maxlength="11" placeholder="11 haneli T.C. kimlik no" value="${escapeHtml(value || "")}" />
+        <button type="button" class="tc-eye-btn" onclick="App.toggleTcInput(this)">👁</button>
+      </div>
+    </div>`;
+  },
+
+  toggleTcInput(btn) {
+    const input = btn.previousElementSibling;
+    clearTimeout(input._tcTimer);
+    if (input.type === "password") {
+      input.type = "text";
+      input._tcTimer = setTimeout(() => { input.type = "password"; }, 5000);
+    } else {
+      input.type = "password";
+    }
+  },
+
+  tcChip(tc) {
+    if (!tc) return `<span class="tc-chip"><span class="tc-chip-val">-</span></span>`;
+    const real = escapeHtml(tc);
+    return `<span class="tc-chip" data-tc="${real}"><span class="tc-chip-val">•••••••••••</span><button type="button" class="tc-eye" onclick="App.toggleTcChip(this)">👁</button></span>`;
+  },
+
+  toggleTcChip(btn) {
+    const wrap = btn.closest(".tc-chip");
+    const val = wrap.querySelector(".tc-chip-val");
+    clearTimeout(wrap._hideTimer);
+    if (val.textContent === wrap.dataset.tc) {
+      val.textContent = "•••••••••••";
+    } else {
+      val.textContent = wrap.dataset.tc;
+      wrap._hideTimer = setTimeout(() => { val.textContent = "•••••••••••"; }, 5000);
+    }
+  },
+
   renderFatal(msg) {
     this.el.innerHTML = `<div class="auth-screen"><div class="auth-card">
       <div class="auth-logo">⚠️</div>
@@ -122,6 +166,7 @@ const App = {
           <div class="field"><label>Şifre (PIN)</label><input id="t-pin" type="password" inputmode="numeric" placeholder="••••" /></div>
           <button class="btn" onclick="App.tenantLogin()">Giriş Yap</button>
           <button class="btn block-link" onclick="App.openForgotPinForm()">Şifremi unuttum?</button>
+          <div class="staff-login-divider"><span>Personel / Yönetim</span></div>
           <button class="btn block-link staff-link" onclick="App.renderAdminLogin()">Yönetim Girişi</button>
           <button class="btn block-link staff-link" onclick="App.renderTechnicianLogin()">Teknik Ekip Girişi</button>
         </div>
@@ -254,31 +299,29 @@ const App = {
         <div class="auth-card">
           <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
           <div class="auth-title">Teknik Ekip Girişi</div>
-          <div class="auth-sub">Teknik ekip şifrenizi girin</div>
+          <div class="auth-sub">Yönetimin size verdiği kullanıcı adı ve şifre ile giriş yapın</div>
+          <div class="field"><label>Kullanıcı Adı</label><input id="tk-user" autocapitalize="none" placeholder="Kullanıcı adınız" /></div>
           <div class="field"><label>Şifre</label><input id="tk-pw" type="password" placeholder="••••••" /></div>
           <button class="btn" onclick="App.technicianLogin()">Giriş Yap</button>
           <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Mağaza girişine dön</button>
         </div>
       </div>`;
-    document.getElementById("tk-pw").focus();
+    document.getElementById("tk-user").focus();
   },
 
   async technicianLogin() {
+    const username = document.getElementById("tk-user").value.trim().toLowerCase();
     const pw = document.getElementById("tk-pw").value;
-    if (!pw) return this.toast("Lütfen şifre girin.", "error");
+    if (!username || !pw) return this.toast("Lütfen kullanıcı adı ve şifreyi girin.", "error");
     try {
-      const ref = db.collection("admin").doc("teknisyen");
-      const doc = await ref.get();
-      if (!doc.exists) {
-        // İlk kurulum: girilen şifre teknik ekip şifresi olarak kaydedilir.
-        await ref.set({ password: pw, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-        this.toast("Teknik ekip şifresi bu girişle oluşturuldu.", "success");
-      } else if (String(doc.data().password) !== pw) {
-        return this.toast("Şifre hatalı.", "error");
-      }
-      this.session = { role: "teknisyen" };
+      const doc = await db.collection("teknikPersonel").doc(username).get();
+      if (!doc.exists) return this.toast("Kullanıcı adı bulunamadı.", "error");
+      const data = doc.data();
+      if (String(data.password) !== pw) return this.toast("Şifre hatalı.", "error");
+      this.session = { role: "teknisyen", technicianId: username, technicianName: data.fullName || username };
       localStorage.setItem("avm_session", JSON.stringify(this.session));
       this.tab = "arizalar";
+      this.toast("Hoş geldiniz, " + this.session.technicianName, "success");
       this.renderTechnicianShell();
       this.tagPushRoleIfNeeded();
     } catch (e) {
@@ -367,9 +410,10 @@ const App = {
           const st = STATUSES.find(s => s.key === t.status) || STATUSES[0];
           return `<div class="card">
             <div class="card-row"><div class="card-title">${escapeHtml(t.category)}</div><span class="badge ${st.cls}">${st.label}</span></div>
+            <div class="ticket-time">🕐 ${this.fmtDate(t.createdAt)}</div>
             <div class="card-body">${escapeHtml(t.description)}</div>
             ${t.technicianNote ? `<div class="card-body"><strong>Teknik ekip notu:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
-            <div class="card-meta">${this.fmtDate(t.createdAt)}</div>
+            ${t.handledBy ? `<div class="card-meta">İşlemi yapan: ${escapeHtml(t.handledBy)}</div>` : ""}
           </div>`;
         }).join("");
       }, (err) => { console.error(err); this.toast("Bildirimler yüklenemedi.", "error"); });
@@ -444,7 +488,7 @@ const App = {
           .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
         list.innerHTML = docs.map((p) => `
           <div class="card">
-            <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.tc || "-")}</span></div>
+            <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div>${this.tcChip(p.tc)}</div>
             <div class="card-body">İşe başlama: ${escapeHtml(p.startDate || "-")}</div>
             ${p.note ? `<div class="card-body">${escapeHtml(p.note)}</div>` : ""}
             <div class="card-meta">${this.fmtDate(p.createdAt)}</div>
@@ -457,7 +501,7 @@ const App = {
     openModal(`
       <h3>Yeni Personel Bildirimi</h3>
       <div class="field"><label>Ad Soyad</label><input id="p-name" placeholder="Ad Soyad" /></div>
-      <div class="field"><label>T.C. Kimlik No</label><input id="p-tc" inputmode="numeric" maxlength="11" placeholder="11 haneli T.C. kimlik no" /></div>
+      ${this.tcInputField("p-tc")}
       <div class="field"><label>İşe Başlama Tarihi</label><input id="p-date" type="date" /></div>
       <div class="field"><label>Not (opsiyonel)</label><textarea id="p-note" placeholder="Varsa ek bilgi..."></textarea></div>
       <button class="btn" onclick="App.submitPersonnel()">Bildirimi Gönder</button>
@@ -670,9 +714,11 @@ const App = {
         const st = STATUSES.find(s => s.key === t.status) || STATUSES[0];
         return `<div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(t.storeName)} · ${escapeHtml(t.category)}</div><span class="badge ${st.cls}">${st.label}</span></div>
+          <div class="ticket-time">🕐 Açılış: ${this.fmtDate(t.createdAt)}</div>
           <div class="card-body">${escapeHtml(t.description)}</div>
           ${t.technicianNote ? `<div class="card-body"><strong>Teknik ekip notu:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
-          <div class="card-meta">${this.fmtDate(t.createdAt)}</div>
+          ${t.handledBy ? `<div class="card-meta">İşlemi yapan: ${escapeHtml(t.handledBy)}</div>` : ""}
+          ${t.updatedAt ? `<div class="card-meta">Son güncelleme: ${this.fmtDate(t.updatedAt)}</div>` : ""}
           <div class="status-select-row">
             ${STATUSES.map(s => `<button class="${t.status === s.key ? "active " + s.cls : ""}" onclick="App.setTicketStatus('${t.id}','${s.key}')">${s.label}</button>`).join("")}
           </div>
@@ -697,9 +743,34 @@ const App = {
   },
 
   /* ---- Personel ---- */
+  /* İki ayrı liste var: mağazaların bildirdiği kendi personeli (salt okunur,
+     "personnel" koleksiyonu) ve Yönetim'in AVM'nin kendi teknik/bakım
+     personelini kaydettiği liste ("teknikPersonel" koleksiyonu — buradan
+     ekleme/düzenleme/silme yapılabilir). İkisi arasında pill-tab ile geçiş
+     yapılır. */
   adminPersonnel(c) {
-    c.innerHTML = `<div class="section-title">Gelen Personel Bildirimleri</div><div id="admin-pers-list"></div>`;
+    this._personnelView = this._personnelView || "magaza";
+    c.innerHTML = `
+      <div class="pill-tabs">
+        <button class="${this._personnelView === "magaza" ? "active" : ""}" onclick="App.setPersonnelView('magaza')">Mağaza Personeli</button>
+        <button class="${this._personnelView === "teknik" ? "active" : ""}" onclick="App.setPersonnelView('teknik')">Teknik Personel</button>
+      </div>
+      <div id="admin-pers-list"></div>`;
     const list = document.getElementById("admin-pers-list");
+    if (this._personnelView === "teknik") {
+      c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openTeknikPersonelForm()">＋</button>`);
+      this.adminTeknikPersonelList(list);
+    } else {
+      this.adminStorePersonnelList(list);
+    }
+  },
+
+  setPersonnelView(v) {
+    this._personnelView = v;
+    this.renderAdminTab();
+  },
+
+  adminStorePersonnelList(list) {
     const unsub = db.collection("personnel").onSnapshot((snap) => {
       if (snap.empty) {
         list.innerHTML = `<div class="empty-state"><span class="emoji">🧑‍💼</span>Henüz personel bildirimi yok.</div>`;
@@ -709,12 +780,92 @@ const App = {
       list.innerHTML = docs.map((p) => `
         <div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.storeName)}</span></div>
-          <div class="card-body">T.C.: ${escapeHtml(p.tc || "-")} · Başlama: ${escapeHtml(p.startDate || "-")}</div>
+          <div class="card-body">T.C.: ${this.tcChip(p.tc)} · Başlama: ${escapeHtml(p.startDate || "-")}</div>
           ${p.note ? `<div class="card-body">${escapeHtml(p.note)}</div>` : ""}
           <div class="card-meta">${this.fmtDate(p.createdAt)}</div>
         </div>`).join("");
     }, (err) => { console.error(err); this.toast("Kayıtlar yüklenemedi.", "error"); });
     this.unsubs.push(unsub);
+  },
+
+  /* ---- Teknik Personel (Yönetim'in kendi kaydettiği teknik/bakım ekibi) ----
+     Her teknik personelin artık kendi kullanıcı adı + şifresi var (T.C. ile
+     ilgisi yok — T.C. gizleme sadece mağazadan gelen personel bildirimlerinde
+     kullanılıyor). Kullanıcı adı, Firestore'da belge ID'si olarak tutulur,
+     bu yüzden tekil olmak zorunda ve giriş sırasında doğrudan aranır. */
+  adminTeknikPersonelList(list) {
+    const unsub = db.collection("teknikPersonel").onSnapshot((snap) => {
+      if (snap.empty) {
+        list.innerHTML = `<div class="empty-state"><span class="emoji">🔧</span>Henüz teknik personel eklenmedi.<br>Sağ alttaki + butonuyla ekleyin.</div>`;
+        return;
+      }
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "tr"));
+      this._teknikPersonelData = docs;
+      list.innerHTML = docs.map((p) => `
+        <div class="list-item">
+          <div>
+            <div class="list-item-main">${escapeHtml(p.fullName)}</div>
+            <div class="list-item-sub">Kullanıcı adı: ${escapeHtml(p.id)}${p.phone ? " · " + escapeHtml(p.phone) : ""}</div>
+            <div class="list-item-sub">${p.startDate ? "İşe başlama: " + escapeHtml(p.startDate) : ""}${p.note ? " · " + escapeHtml(p.note) : ""}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button class="icon-action" onclick="App.openTeknikPersonelForm('${p.id}')">Düzenle</button>
+            <button class="icon-action danger" onclick="App.deleteTeknikPersonel('${p.id}')">Sil</button>
+          </div>
+        </div>`).join("");
+    }, (err) => { console.error(err); this.toast("Kayıtlar yüklenemedi.", "error"); });
+    this.unsubs.push(unsub);
+  },
+
+  openTeknikPersonelForm(username) {
+    const p = username ? (this._teknikPersonelData || []).find(x => x.id === username) : null;
+    openModal(`
+      <h3>${p ? "Teknik Personeli Düzenle" : "Yeni Teknik Personel Ekle"}</h3>
+      <div class="field"><label>Kullanıcı Adı (girişte kullanılır)</label><input id="tp-user" ${p ? "disabled" : ""} value="${p ? escapeHtml(p.id) : ""}" autocapitalize="none" placeholder="Örn: ahmet.teknik" /></div>
+      <div class="field"><label>Ad Soyad</label><input id="tp-name" value="${p ? escapeHtml(p.fullName || "") : ""}" placeholder="Ad Soyad" /></div>
+      <div class="field"><label>Giriş Şifresi</label><input id="tp-pw" value="${p ? escapeHtml(p.password || "") : ""}" placeholder="Örn: 1234" /></div>
+      <div class="field"><label>Telefon (opsiyonel)</label><input id="tp-phone" type="tel" value="${p ? escapeHtml(p.phone || "") : ""}" placeholder="05xx xxx xx xx" /></div>
+      <div class="field"><label>İşe Başlama Tarihi</label><input id="tp-date" type="date" value="${p ? escapeHtml(p.startDate || "") : ""}" /></div>
+      <div class="field"><label>Not (opsiyonel)</label><textarea id="tp-note" placeholder="Varsa ek bilgi...">${p ? escapeHtml(p.note || "") : ""}</textarea></div>
+      <button class="btn" onclick="App.submitTeknikPersonel(${p ? "true" : "false"})">Kaydet</button>
+    `);
+  },
+
+  async submitTeknikPersonel(isEdit) {
+    const username = document.getElementById("tp-user").value.trim().toLowerCase();
+    const fullName = document.getElementById("tp-name").value.trim();
+    const password = document.getElementById("tp-pw").value.trim();
+    const phone = document.getElementById("tp-phone").value.trim();
+    const startDate = document.getElementById("tp-date").value;
+    const note = document.getElementById("tp-note").value.trim();
+    if (!username || !fullName || !password) return this.toast("Kullanıcı adı, ad soyad ve şifre zorunludur.", "error");
+    try {
+      if (isEdit) {
+        await db.collection("teknikPersonel").doc(username).update({ fullName, password, phone, startDate, note });
+      } else {
+        const existing = await db.collection("teknikPersonel").doc(username).get();
+        if (existing.exists) return this.toast("Bu kullanıcı adı zaten kullanılıyor, başka bir tane seçin.", "error");
+        await db.collection("teknikPersonel").doc(username).set({
+          fullName, password, phone, startDate, note,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      closeModal();
+      this.toast(isEdit ? "Teknik personel güncellendi." : "Teknik personel eklendi.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast("Kaydedilemedi: " + e.message, "error");
+    }
+  },
+
+  async deleteTeknikPersonel(id) {
+    if (!confirm("Bu teknik personeli silmek istediğinize emin misiniz?")) return;
+    try {
+      await db.collection("teknikPersonel").doc(id).delete();
+      this.toast("Silindi.", "success");
+    } catch (e) {
+      this.toast("Silinemedi: " + e.message, "error");
+    }
   },
 
   /* ---- Duyurular ---- */
@@ -832,7 +983,7 @@ const App = {
     this.el.innerHTML = `
       <div class="shell">
         <div class="topbar">
-          <div><div class="title">Afium Portal</div><div class="sub">Teknik Ekip Paneli</div></div>
+          <div><div class="title">Afium Portal</div><div class="sub">Teknik Ekip · ${escapeHtml((this.session && this.session.technicianName) || "")}</div></div>
           <button class="icon-btn" onclick="App.logout()">Çıkış</button>
         </div>
         <div class="content" id="tech-content"></div>
@@ -864,9 +1015,10 @@ const App = {
         const isDone = t.status === "cozuldu";
         return `<div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(t.storeName)} · ${escapeHtml(t.category)}</div><span class="badge ${st.cls}">${st.label}</span></div>
+          <div class="ticket-time">🕐 Açılış: ${this.fmtDate(t.createdAt)}</div>
           <div class="card-body">${escapeHtml(t.description)}</div>
-          <div class="card-meta">${this.fmtDate(t.createdAt)}</div>
           ${t.technicianNote ? `<div class="card-body"><strong>Not:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
+          ${t.handledBy ? `<div class="card-meta">İşlemi yapan: ${escapeHtml(t.handledBy)}</div>` : ""}
           ${!isDone ? `
           <div class="status-select-row">
             <button class="active done" onclick="App.technicianMarkDone('${t.id}')">✓ Yapıldı</button>
@@ -887,6 +1039,7 @@ const App = {
     try {
       await db.collection("tickets").doc(id).update({
         status: "cozuldu",
+        handledBy: (this.session && this.session.technicianName) || "Teknik Ekip",
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       this.toast("Arıza yapıldı olarak işaretlendi.", "success");
@@ -912,6 +1065,7 @@ const App = {
       await db.collection("tickets").doc(id).update({
         technicianNote: note,
         status: "islemde",
+        handledBy: (this.session && this.session.technicianName) || "Teknik Ekip",
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       closeModal();
