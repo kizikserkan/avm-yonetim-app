@@ -25,6 +25,12 @@ jobs:
 
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
+        with:
+          # Bu action varsayılan olarak "tools platform-tools" paketlerini
+          # kurmaya çalışır; Google'ın artık kaldırdığı eski "tools"
+          # paketi bulunamadığı için derleme başlamadan hemen patlıyordu.
+          # Sadece hâlâ var olan ve gerekli olan platform-tools'u kuruyoruz.
+          packages: "platform-tools"
 
       - name: Paketleri yükle
         run: npm install
