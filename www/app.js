@@ -47,6 +47,10 @@ const App = {
       this.tab = "magazalar";
       this.renderAdminShell();
       this.tagPushRoleIfNeeded();
+    } else if (this.session && this.session.role === "teknisyen") {
+      this.tab = "arizalar";
+      this.renderTechnicianShell();
+      this.tagPushRoleIfNeeded();
     } else {
       this.renderTenantLogin();
     }
@@ -61,6 +65,8 @@ const App = {
       try { window.plugins.OneSignal.User.addTag("role", "tenant"); } catch (e) { console.warn(e); }
     } else if (this.session && this.session.role === "admin") {
       try { window.plugins.OneSignal.User.addTag("role", "admin"); } catch (e) { console.warn(e); }
+    } else if (this.session && this.session.role === "teknisyen") {
+      try { window.plugins.OneSignal.User.addTag("role", "teknisyen"); } catch (e) { console.warn(e); }
     }
   },
 
@@ -116,7 +122,8 @@ const App = {
           <div class="field"><label>Şifre (PIN)</label><input id="t-pin" type="password" inputmode="numeric" placeholder="••••" /></div>
           <button class="btn" onclick="App.tenantLogin()">Giriş Yap</button>
           <button class="btn block-link" onclick="App.openForgotPinForm()">Şifremi unuttum?</button>
-          <button class="btn block-link staff-link" onclick="App.renderAdminLogin()">Yönetim / Teknik Girişi</button>
+          <button class="btn block-link staff-link" onclick="App.renderAdminLogin()">Yönetim Girişi</button>
+          <button class="btn block-link staff-link" onclick="App.renderTechnicianLogin()">Teknik Ekip Girişi</button>
         </div>
       </div>`;
     document.getElementById("t-code").focus();
@@ -239,6 +246,48 @@ const App = {
   },
 
   /* ---------------------------------------------------------------- */
+  /* TEKNİK EKİP GİRİŞİ                                                 */
+  /* ---------------------------------------------------------------- */
+  renderTechnicianLogin() {
+    this.el.innerHTML = `
+      <div class="auth-screen">
+        <div class="auth-card">
+          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
+          <div class="auth-title">Teknik Ekip Girişi</div>
+          <div class="auth-sub">Teknik ekip şifrenizi girin</div>
+          <div class="field"><label>Şifre</label><input id="tk-pw" type="password" placeholder="••••••" /></div>
+          <button class="btn" onclick="App.technicianLogin()">Giriş Yap</button>
+          <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Mağaza girişine dön</button>
+        </div>
+      </div>`;
+    document.getElementById("tk-pw").focus();
+  },
+
+  async technicianLogin() {
+    const pw = document.getElementById("tk-pw").value;
+    if (!pw) return this.toast("Lütfen şifre girin.", "error");
+    try {
+      const ref = db.collection("admin").doc("teknisyen");
+      const doc = await ref.get();
+      if (!doc.exists) {
+        // İlk kurulum: girilen şifre teknik ekip şifresi olarak kaydedilir.
+        await ref.set({ password: pw, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        this.toast("Teknik ekip şifresi bu girişle oluşturuldu.", "success");
+      } else if (String(doc.data().password) !== pw) {
+        return this.toast("Şifre hatalı.", "error");
+      }
+      this.session = { role: "teknisyen" };
+      localStorage.setItem("avm_session", JSON.stringify(this.session));
+      this.tab = "arizalar";
+      this.renderTechnicianShell();
+      this.tagPushRoleIfNeeded();
+    } catch (e) {
+      console.error(e);
+      this.toast("Giriş yapılamadı: " + e.message, "error");
+    }
+  },
+
+  /* ---------------------------------------------------------------- */
   /* TENANT SHELL                                                       */
   /* ---------------------------------------------------------------- */
   renderTenantShell() {
@@ -319,6 +368,7 @@ const App = {
           return `<div class="card">
             <div class="card-row"><div class="card-title">${escapeHtml(t.category)}</div><span class="badge ${st.cls}">${st.label}</span></div>
             <div class="card-body">${escapeHtml(t.description)}</div>
+            ${t.technicianNote ? `<div class="card-body"><strong>Teknik ekip notu:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
             <div class="card-meta">${this.fmtDate(t.createdAt)}</div>
           </div>`;
         }).join("");
@@ -370,7 +420,7 @@ const App = {
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
           secret: PUSH_SECRET,
-          role: "admin",
+          role: ["admin", "teknisyen"],
           heading: "🔧 Yeni Arıza Bildirimi",
           content: storeName + " — " + category
         })
@@ -621,6 +671,7 @@ const App = {
         return `<div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(t.storeName)} · ${escapeHtml(t.category)}</div><span class="badge ${st.cls}">${st.label}</span></div>
           <div class="card-body">${escapeHtml(t.description)}</div>
+          ${t.technicianNote ? `<div class="card-body"><strong>Teknik ekip notu:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
           <div class="card-meta">${this.fmtDate(t.createdAt)}</div>
           <div class="status-select-row">
             ${STATUSES.map(s => `<button class="${t.status === s.key ? "active " + s.cls : ""}" onclick="App.setTicketStatus('${t.id}','${s.key}')">${s.label}</button>`).join("")}
@@ -715,8 +766,32 @@ const App = {
       closeModal();
       this.toast("Duyuru yayınlandı.", "success");
       this.sendAnnouncementPush(title, priority);
+      this.sendAnnouncementEmails(title, body);
     } catch (e) {
       this.toast("Yayınlanamadı: " + e.message, "error");
+    }
+  },
+
+  async sendAnnouncementEmails(title, body) {
+    if (!window.emailjs) return;
+    if (typeof EMAILJS_SERVICE_ID === "undefined" || EMAILJS_SERVICE_ID.startsWith("BURAYA")) return;
+    if (typeof EMAILJS_ANNOUNCEMENT_TEMPLATE_ID === "undefined" || EMAILJS_ANNOUNCEMENT_TEMPLATE_ID.startsWith("BURAYA")) return;
+    try {
+      const snap = await db.collection("stores").get();
+      const stores = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => s.email);
+      for (const s of stores) {
+        try {
+          await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_ANNOUNCEMENT_TEMPLATE_ID, {
+            to_email: s.email,
+            store_name: s.name || s.id,
+            title, body
+          });
+        } catch (e) {
+          console.warn("Duyuru e-postası gönderilemedi (" + s.id + "):", e);
+        }
+      }
+    } catch (e) {
+      console.warn("Mağaza listesi alınamadı, duyuru e-postaları gönderilemedi:", e);
     }
   },
 
@@ -746,6 +821,103 @@ const App = {
       this.toast("Duyuru kaldırıldı.", "success");
     } catch (e) {
       this.toast("Kaldırılamadı: " + e.message, "error");
+    }
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* TEKNİK EKİP PANELİ (arızaları onaylama / not düşme)                */
+  /* ---------------------------------------------------------------- */
+  renderTechnicianShell() {
+    this.clearListeners();
+    this.el.innerHTML = `
+      <div class="shell">
+        <div class="topbar">
+          <div><div class="title">Afium Portal</div><div class="sub">Teknik Ekip Paneli</div></div>
+          <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+        </div>
+        <div class="content" id="tech-content"></div>
+      </div>`;
+    this.technicianTickets(document.getElementById("tech-content"));
+  },
+
+  technicianTickets(c) {
+    this._techFilter = this._techFilter || "acik";
+    c.innerHTML = `
+      <div class="pill-tabs">
+        <button class="${this._techFilter === "acik" ? "active" : ""}" onclick="App.filterTechnicianTickets('acik')">Açık</button>
+        <button class="${this._techFilter === "islemde" ? "active" : ""}" onclick="App.filterTechnicianTickets('islemde')">İşlemde</button>
+        <button class="${this._techFilter === "all" ? "active" : ""}" onclick="App.filterTechnicianTickets('all')">Tümü</button>
+      </div>
+      <div id="tech-ticket-list"></div>`;
+    const list = document.getElementById("tech-ticket-list");
+    const unsub = db.collection("tickets").onSnapshot((snap) => {
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (this._techFilter !== "all") docs = docs.filter(t => t.status === this._techFilter);
+      docs.sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
+      this._techTicketsData = docs;
+      if (docs.length === 0) {
+        list.innerHTML = `<div class="empty-state"><span class="emoji">✅</span>Bu listede arıza yok.</div>`;
+        return;
+      }
+      list.innerHTML = docs.map((t) => {
+        const st = STATUSES.find(s => s.key === t.status) || STATUSES[0];
+        const isDone = t.status === "cozuldu";
+        return `<div class="card">
+          <div class="card-row"><div class="card-title">${escapeHtml(t.storeName)} · ${escapeHtml(t.category)}</div><span class="badge ${st.cls}">${st.label}</span></div>
+          <div class="card-body">${escapeHtml(t.description)}</div>
+          <div class="card-meta">${this.fmtDate(t.createdAt)}</div>
+          ${t.technicianNote ? `<div class="card-body"><strong>Not:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
+          ${!isDone ? `
+          <div class="status-select-row">
+            <button class="active done" onclick="App.technicianMarkDone('${t.id}')">✓ Yapıldı</button>
+            <button onclick="App.openTechnicianNoteForm('${t.id}')">Not Ekle</button>
+          </div>` : ""}
+        </div>`;
+      }).join("");
+    }, (err) => { console.error(err); this.toast("Arızalar yüklenemedi.", "error"); });
+    this.unsubs.push(unsub);
+  },
+
+  filterTechnicianTickets(f) {
+    this._techFilter = f;
+    this.technicianTickets(document.getElementById("tech-content"));
+  },
+
+  async technicianMarkDone(id) {
+    try {
+      await db.collection("tickets").doc(id).update({
+        status: "cozuldu",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      this.toast("Arıza yapıldı olarak işaretlendi.", "success");
+    } catch (e) {
+      this.toast("Güncellenemedi: " + e.message, "error");
+    }
+  },
+
+  openTechnicianNoteForm(id) {
+    const t = ((this._techTicketsData || [])).find(x => x.id === id);
+    openModal(`
+      <h3>Not Ekle</h3>
+      <div class="auth-sub" style="text-align:left;margin-bottom:16px">Bu arıza neden henüz yapılmadı? Mağaza ve yönetim bu notu görebilecek.</div>
+      <div class="field"><label>Not</label><textarea id="tn-note" placeholder="Örn: Yedek parça bekleniyor...">${escapeHtml((t && t.technicianNote) || "")}</textarea></div>
+      <button class="btn" onclick="App.submitTechnicianNote('${id}')">Kaydet</button>
+    `);
+  },
+
+  async submitTechnicianNote(id) {
+    const note = document.getElementById("tn-note").value.trim();
+    if (!note) return this.toast("Lütfen bir not girin.", "error");
+    try {
+      await db.collection("tickets").doc(id).update({
+        technicianNote: note,
+        status: "islemde",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      closeModal();
+      this.toast("Not kaydedildi.", "success");
+    } catch (e) {
+      this.toast("Kaydedilemedi: " + e.message, "error");
     }
   }
 };
