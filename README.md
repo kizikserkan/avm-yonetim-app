@@ -329,14 +329,37 @@ oluşturulacağı ve hangi değişkenlerin kullanılacağı anlatılıyor;
 oluşturduğunuz şablonun ID'sini `emailjs-config.js` içindeki
 `EMAILJS_ANNOUNCEMENT_TEMPLATE_ID` satırına yapıştırmanız gerekiyor.
 
-**Önemli:** `emailjs-config.js` içindeki dört değer de hâlâ
-`"BURAYA_..."` şeklinde boş — yani EmailJS hesabı hiç kurulmamış. Bu
-kurulana kadar ne "şifremi unuttum" e-postaları ne de yeni duyuru
-e-postaları gönderilir (kod, eksik ayarı fark edip sessizce atlar, hata
-vermez). Gönderimin çalışması için EmailJS'te bir hesap açıp, bir Email
-Service ve **iki** Email Template (şifre sıfırlama + duyuru) oluşturup,
-dördünü de bu dosyaya yapıştırmanız gerekiyor — dosyanın en üstündeki
-adımları takip edebilirsiniz.
+**Önemli:** `emailjs-config.js` içindeki değerler hâlâ `"BURAYA_..."`
+şeklinde boşsa, EmailJS hesabı kurulmamış demektir. Kurulana kadar ne
+"şifremi unuttum" e-postaları, ne duyuru e-postaları, ne de aşağıdaki
+arıza bildirim e-postaları gönderilir (kod, eksik ayarı fark edip
+sessizce atlar, hata vermez). Gönderimin çalışması için EmailJS'te bir
+hesap açıp, bir Email Service ve **üç** Email Template (şifre
+sıfırlama + duyuru + arıza bildirimi) oluşturup, beş değeri de bu
+dosyaya yapıştırmanız gerekiyor — dosyanın en üstündeki adımları takip
+edebilirsiniz.
+
+**Not — Gmail zorunlu değil:** "Email Services" eklerken Gmail'e mecbur
+değilsiniz; EmailJS'te **"Custom SMTP Server"** seçeneğiyle kendi
+hosting'inizin (veya herhangi bir sağlayıcının) SMTP bilgilerini
+(sunucu adresi, port, kullanıcı adı, şifre) girerek kendi e-posta
+hesabınızı da bağlayabilirsiniz. Bu bilgileri hosting sağlayıcınızın
+"e-posta ayarları" sayfasından alabilirsiniz (POP3 ile aynı hesap,
+gönderim için SMTP bilgisi kullanılır).
+
+### Arıza bildirimi açıldığında Yönetim'e e-posta
+
+Bir mağaza yeni bir arıza bildirdiğinde, push bildiriminin yanı sıra
+artık **Yönetim'in kendi e-postasına** da otomatik bir bilgilendirme
+e-postası gidiyor. E-posta adresinizi, Yönetim panelinde sağ üstteki
+**⚙️ (Ayarlar)** ikonuna basıp açılan ekrandan girip kaydedebilirsiniz.
+
+Bunun için EmailJS'te **üçüncü bir şablon** (arıza bildirimi şablonu)
+oluşturup ID'sini `emailjs-config.js` içindeki
+`EMAILJS_TICKET_TEMPLATE_ID` satırına yapıştırmanız gerekiyor — dosyanın
+en üstündeki "3c" adımına bakabilirsiniz. ⚙️ Ayarlar'dan e-posta
+girilmemişse veya bu şablon ayarlanmamışsa, bildirim sessizce
+gönderilmez (hata vermez), sadece push bildirimi çalışmaya devam eder.
 
 ### Duyurularda geçerlilik bitiş tarihi
 
