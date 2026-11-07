@@ -272,6 +272,72 @@ etiketlenir). Sadece bilgisayardan web panelini kullanıyorsanız push
 bildirimi almazsınız — ama arıza, panel açıkken zaten anlık olarak listeye
 düşer, ayrıca push'a ihtiyaç yoktur.
 
+### Teknik Ekip Girişi
+
+Mağaza giriş ekranındaki "Yönetim Girişi" butonunun yanına, aynı görünümde
+ayrı bir **"Teknik Ekip Girişi"** butonu eklendi. Bu, bakım/teknik ekibin
+kullanacağı, Yönetim'den tamamen ayrı ve daha sınırlı bir giriştir:
+
+- Ortak bir şifre değil, **her teknik personelin kendi kullanıcı adı ve
+  şifresi** var. Bu hesaplar Yönetim panelindeki **Personel → Teknik
+  Personel** sekmesinden eklenir/düzenlenir/silinir (ad soyad, kullanıcı
+  adı, şifre, telefon, işe başlama tarihi, not). Şifresini unutan bir
+  teknik personel için buradan şifresini görüp değiştirebilirsiniz.
+- Bir teknik personel "✓ Yapıldı" dediğinde veya not eklediğinde, bu
+  işlemi kimin yaptığı ("İşlemi yapan: ...") arıza kartında hem mağazaya
+  hem Yönetime görünür — kim neyi çözmüş takip edilebilir.
+- Teknik ekip girişini yapan biri, **tüm mağazalardan gelen arıza
+  bildirimlerini** (Yönetim panelindeki gibi, tek bir listede) görür.
+  Kendi mağaza filtrelemesi yoktur.
+- Her arıza için iki buton sunulur: **"✓ Yapıldı"** (durumu doğrudan
+  "Çözüldü" yapar) ve **"Not Ekle"** (bir açıklama yazıp kaydeder — örn.
+  "parça bekleniyor", "yarın bakılacak"). Not eklendiğinde durum
+  "İşlemde"ye döner ve bu not, hem mağazanın kendi arıza ekranında hem de
+  Yönetim panelindeki arıza kartında **"Teknik ekip notu:"** olarak
+  görünür.
+- Yeni bir arıza bildirimi geldiğinde push bildirimi artık **hem Yönetim
+  hem Teknik Ekip** girişiyle oturum açmış cihazlara gider (ikisi de
+  bildirim almak isterse, her ikisinde de ilgili APK girişinin en az bir
+  kez yapılmış olması gerekir — bkz. yukarıdaki "Önemli" notu).
+
+**Dikkat — Cloudflare Worker'ı da güncellemeniz gerekiyor:** Bu özelliğin
+çalışması için push isteğini OneSignal'a ileten Cloudflare Worker kodu da
+güncellendi (birden fazla role aynı anda bildirim gönderebilmek için).
+Projedeki `www/Cloudflare worker.js` dosyası sadece bir **referans
+kopyasıdır** — gerçek çalışan kod, Cloudflare'ın kendi panelindedir.
+Bu yüzden:
+
+1. Cloudflare panelinde (dash.cloudflare.com) ilgili Worker'ı açın
+   ("Edit code").
+2. İçindeki tüm kodu silip, bu projede size verilen güncel
+   `Cloudflare worker.js` dosyasının içeriğiyle değiştirin.
+3. "Deploy" / "Save and deploy" butonuna basın.
+
+Bu adım atlanırsa, Teknik Ekip cihazlarına arıza push bildirimi gitmez
+(mevcut Yönetim bildirimleri eskisi gibi çalışmaya devam eder).
+
+### Duyurular için otomatik e-posta
+
+Yönetim bir duyuru yayınladığında, artık push bildiriminin yanı sıra,
+e-posta adresi kayıtlı olan **her mağazaya otomatik bir e-posta** da
+gönderiliyor (duyurunun başlığı ve metniyle).
+
+Bunun çalışması için EmailJS tarafında **ikinci bir şablon** gerekiyor —
+"şifremi unuttum" e-postalarından ayrı, duyuru için özel bir şablon. Bu
+dosyanın en üstündeki açıklamada ("Bölüm 3b") şablonun nasıl
+oluşturulacağı ve hangi değişkenlerin kullanılacağı anlatılıyor;
+oluşturduğunuz şablonun ID'sini `emailjs-config.js` içindeki
+`EMAILJS_ANNOUNCEMENT_TEMPLATE_ID` satırına yapıştırmanız gerekiyor.
+
+**Önemli:** `emailjs-config.js` içindeki dört değer de hâlâ
+`"BURAYA_..."` şeklinde boş — yani EmailJS hesabı hiç kurulmamış. Bu
+kurulana kadar ne "şifremi unuttum" e-postaları ne de yeni duyuru
+e-postaları gönderilir (kod, eksik ayarı fark edip sessizce atlar, hata
+vermez). Gönderimin çalışması için EmailJS'te bir hesap açıp, bir Email
+Service ve **iki** Email Template (şifre sıfırlama + duyuru) oluşturup,
+dördünü de bu dosyaya yapıştırmanız gerekiyor — dosyanın en üstündeki
+adımları takip edebilirsiniz.
+
 ---
 
 ## Güncelleme yapmak isterseniz
