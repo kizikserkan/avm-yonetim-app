@@ -152,13 +152,14 @@ const App = {
   },
 
   /* ---------------------------------------------------------------- */
-  /* GİRİŞ (tek ekran — mağaza, teknik personel, yönetim hepsi burada)  */
-  /* Kullanıcı adı + şifre girilir; hangi rol olduğu otomatik anlaşılır:*/
-  /* "yonetim" → Yönetim (admin/main), büyük harfe çevrilip "stores"    */
-  /* koleksiyonunda aranır → Mağaza, bulunamazsa küçük harfe çevrilip   */
-  /* "teknikPersonel" koleksiyonunda aranır → Teknik Ekip. Ayrı giriş   */
-  /* ekranları/butonları olduğu için eskiden gerekli olan görsel ayrım  */
-  /* ihtiyacı da böylece ortadan kalkmış oluyor.                        */
+  /* GİRİŞ (tek ekran — mağaza, teknik personel, yönetim hepsi burada)   */
+  /* Kullanıcı adı + şifre girilir; hangi rol olduğu otomatik anlaşılır: */
+  /* "yonetim" ya da "admin" → Yönetim (admin/main); büyük harfe         */
+  /* çevrilip "stores" koleksiyonunda aranır → Mağaza; bulunamazsa      */
+  /* küçük harfe çevrilip "teknikPersonel" koleksiyonunda aranır →      */
+  /* Teknik Ekip. Ayrı giriş ekranları/butonları olduğu için eskiden    */
+  /* gerekli olan görsel ayrım ihtiyacı da böylece ortadan kalkmış      */
+  /* oluyor.                                                             */
   /* ---------------------------------------------------------------- */
   renderTenantLogin() {
     this.clearListeners();
@@ -183,8 +184,9 @@ const App = {
     if (!username || !pw) return this.toast("Lütfen kullanıcı adı ve şifreyi girin.", "error");
     const lower = username.toLowerCase();
     try {
-      /* 1) Yönetim — sabit "yonetim" kullanıcı adı, admin/main dokümanına bakar. */
-      if (lower === "yonetim") {
+      /* 1) Yönetim — "yonetim" veya "admin" kullanıcı adı, admin/main dokümanına bakar.
+         ("admin" da kabul edilir çünkü çoğu kişinin ilk aklına gelen bu oluyor.) */
+      if (lower === "yonetim" || lower === "admin") {
         const ref = db.collection("admin").doc("main");
         const doc = await ref.get();
         let data;
