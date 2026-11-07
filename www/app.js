@@ -533,6 +533,7 @@ const App = {
       closeModal();
       this.toast("Arıza bildirimi gönderildi.", "success");
       this.sendTicketPush(this.session.storeName, category);
+      this.sendTicketEmail(this.session.storeName, category, description);
     } catch (e) {
       console.error(e);
       this.toast("Gönderilemedi: " + e.message, "error");
@@ -555,6 +556,27 @@ const App = {
       });
     } catch (e) {
       console.warn("Push bildirimi gönderilemedi:", e);
+    }
+  },
+
+  /* Yeni arıza bildirimi açıldığında Yönetim'in kendi e-postasına da bir
+     bildirim e-postası gönderilir — e-posta, Yönetim panelindeki ⚙️
+     Ayarlar'dan girilir (admin/main belgesinde "email" alanı). */
+  async sendTicketEmail(storeName, category, description) {
+    if (!window.emailjs) return;
+    if (typeof EMAILJS_SERVICE_ID === "undefined" || EMAILJS_SERVICE_ID.startsWith("BURAYA")) return;
+    if (typeof EMAILJS_TICKET_TEMPLATE_ID === "undefined" || EMAILJS_TICKET_TEMPLATE_ID.startsWith("BURAYA")) return;
+    try {
+      const doc = await db.collection("admin").doc("main").get();
+      const adminEmail = doc.exists ? (doc.data().email || "") : "";
+      if (!adminEmail) return;
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TICKET_TEMPLATE_ID, {
+        to_email: adminEmail,
+        store_name: storeName,
+        category, description
+      });
+    } catch (e) {
+      console.warn("Arıza bildirim e-postası gönderilemedi:", e);
     }
   },
 
@@ -629,7 +651,10 @@ const App = {
       <div class="shell">
         <div class="topbar">
           <div><div class="title">Afium Portal</div><div class="sub">Yönetici Paneli</div></div>
-          <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+          <div style="display:flex;gap:8px">
+            <button class="icon-btn" onclick="App.openAdminSettingsForm()">⚙️</button>
+            <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+          </div>
         </div>
         <div class="content" id="admin-content"></div>
         <div class="bottomnav">
@@ -642,6 +667,33 @@ const App = {
   setAdminTab(tab) {
     this.tab = tab;
     this.renderAdminShell();
+  },
+
+  /* ---- Ayarlar (Yönetim'in kendi e-postası vb.) ---- */
+  async openAdminSettingsForm() {
+    let email = "";
+    try {
+      const doc = await db.collection("admin").doc("main").get();
+      if (doc.exists) email = doc.data().email || "";
+    } catch (e) { console.error(e); }
+    openModal(`
+      <h3>Yönetim Ayarları</h3>
+      <div class="auth-sub" style="text-align:left;margin-bottom:16px">Buraya girdiğiniz e-posta adresine, yeni bir arıza bildirimi açıldığında otomatik bilgilendirme e-postası gönderilir (EmailJS kurulu olmalıdır).</div>
+      <div class="field"><label>Yönetim E-posta Adresi</label><input id="as-email" type="email" value="${escapeHtml(email)}" placeholder="ornek@eposta.com" /></div>
+      <button class="btn" onclick="App.submitAdminSettings()">Kaydet</button>
+    `);
+  },
+
+  async submitAdminSettings() {
+    const email = document.getElementById("as-email").value.trim().toLowerCase();
+    try {
+      await db.collection("admin").doc("main").update({ email });
+      closeModal();
+      this.toast("Ayarlar kaydedildi.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast("Kaydedilemedi: " + e.message, "error");
+    }
   },
 
   renderAdminTab() {
