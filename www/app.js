@@ -272,22 +272,101 @@ const App = {
     try {
       const ref = db.collection("admin").doc("main");
       const doc = await ref.get();
+      let data;
       if (!doc.exists) {
         // İlk kurulum: girilen şifre yönetici şifresi olarak kaydedilir.
-        await ref.set({ password: pw, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        data = { password: pw, createdAt: firebase.firestore.FieldValue.serverTimestamp() };
+        await ref.set(data);
         this.toast("Yönetici şifresi bu girişle oluşturuldu.", "success");
-      } else if (String(doc.data().password) !== pw) {
-        return this.toast("Şifre hatalı.", "error");
+      } else {
+        data = doc.data();
+        if (String(data.password) !== pw) return this.toast("Şifre hatalı.", "error");
       }
-      this.session = { role: "admin" };
-      localStorage.setItem("avm_session", JSON.stringify(this.session));
-      this.tab = "magazalar";
-      this.renderAdminShell();
-      this.tagPushRoleIfNeeded();
+      // Şifre doğruysa, iki aşamalı doğrulama (2FA) devreye girer: daha önce
+      // kurulduysa kod sorulur, kurulmadıysa önce kurulum ekranı gösterilir.
+      if (data.totpEnabled && data.totpSecret) {
+        this.render2faVerify(data.totpSecret);
+      } else {
+        this.render2faSetup();
+      }
     } catch (e) {
       console.error(e);
       this.toast("Giriş yapılamadı: " + e.message, "error");
     }
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* YÖNETİM GİRİŞİ — İKİ AŞAMALI DOĞRULAMA (2FA / TOTP)                */
+  /* Şifre doğrulandıktan sonraki ikinci adım. Google Authenticator,    */
+  /* Microsoft Authenticator vb. standart TOTP uygulamalarıyla uyumludur.*/
+  /* ---------------------------------------------------------------- */
+  render2faSetup() {
+    this._pendingTotpSecret = TOTP.generateSecret();
+    const uri = TOTP.otpAuthUri(this._pendingTotpSecret, "yonetim");
+    this.el.innerHTML = `
+      <div class="auth-screen">
+        <div class="auth-card">
+          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
+          <div class="auth-title">İki Aşamalı Doğrulama Kurulumu</div>
+          <div class="auth-sub">Telefonunuzda Google Authenticator, Microsoft Authenticator veya benzeri bir uygulama açın, aşağıdaki kodu okutun; sonra uygulamada beliren 6 haneli kodu girin.</div>
+          <div style="display:flex;justify-content:center;margin-bottom:14px"><canvas id="totp-qr"></canvas></div>
+          <div class="field"><label>QR okutamıyorsanız, manuel giriş anahtarı</label><input value="${this._pendingTotpSecret}" readonly onclick="this.select()" /></div>
+          <div class="field"><label>Uygulamadaki 6 Haneli Kod</label><input id="totp-code" inputmode="numeric" maxlength="6" placeholder="000000" /></div>
+          <button class="btn" onclick="App.confirmTotpSetup()">Onayla ve Girişi Tamamla</button>
+          <button class="btn block-link" onclick="App.renderAdminLogin()">‹ Geri dön</button>
+        </div>
+      </div>`;
+    if (window.QRCode) {
+      QRCode.toCanvas(document.getElementById("totp-qr"), uri, { width: 190, margin: 1 }, (err) => { if (err) console.error(err); });
+    }
+  },
+
+  async confirmTotpSetup() {
+    const code = document.getElementById("totp-code").value;
+    const ok = await TOTP.verifyCode(this._pendingTotpSecret, code);
+    if (!ok) return this.toast("Kod hatalı, tekrar deneyin.", "error");
+    try {
+      await db.collection("admin").doc("main").update({
+        totpSecret: this._pendingTotpSecret,
+        totpEnabled: true
+      });
+      this.toast("İki aşamalı doğrulama kuruldu.", "success");
+      this.completeAdminLogin();
+    } catch (e) {
+      console.error(e);
+      this.toast("Kaydedilemedi: " + e.message, "error");
+    }
+  },
+
+  render2faVerify(secret) {
+    this._pendingTotpSecret = secret;
+    this.el.innerHTML = `
+      <div class="auth-screen">
+        <div class="auth-card">
+          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
+          <div class="auth-title">İki Aşamalı Doğrulama</div>
+          <div class="auth-sub">Doğrulama uygulamanızdaki 6 haneli kodu girin</div>
+          <div class="field"><label>6 Haneli Kod</label><input id="totp-code" inputmode="numeric" maxlength="6" placeholder="000000" /></div>
+          <button class="btn" onclick="App.verifyTotpLogin()">Giriş Yap</button>
+          <button class="btn block-link" onclick="App.renderAdminLogin()">‹ Geri dön</button>
+        </div>
+      </div>`;
+    document.getElementById("totp-code").focus();
+  },
+
+  async verifyTotpLogin() {
+    const code = document.getElementById("totp-code").value;
+    const ok = await TOTP.verifyCode(this._pendingTotpSecret, code);
+    if (!ok) return this.toast("Kod hatalı.", "error");
+    this.completeAdminLogin();
+  },
+
+  completeAdminLogin() {
+    this.session = { role: "admin" };
+    localStorage.setItem("avm_session", JSON.stringify(this.session));
+    this.tab = "magazalar";
+    this.renderAdminShell();
+    this.tagPushRoleIfNeeded();
   },
 
   /* ---------------------------------------------------------------- */
@@ -374,17 +453,22 @@ const App = {
     const list = document.getElementById("ann-list");
     const unsub = db.collection("announcements").orderBy("createdAt", "desc").limit(50)
       .onSnapshot((snap) => {
-        if (snap.empty) {
+        const now = Date.now();
+        const docs = snap.docs.filter(d => {
+          const a = d.data();
+          return !a.expiresAt || tsVal(a.expiresAt) > now;
+        });
+        if (docs.length === 0) {
           list.innerHTML = `<div class="empty-state"><span class="emoji">📭</span>Henüz duyuru yok.</div>`;
           return;
         }
-        list.innerHTML = snap.docs.map((d) => {
+        list.innerHTML = docs.map((d) => {
           const a = d.data();
           const badge = a.priority === "Önemli" ? `<span class="badge important">Önemli</span>` : `<span class="badge normal">Duyuru</span>`;
           return `<div class="card">
             <div class="card-row"><div class="card-title">${escapeHtml(a.title || "")}</div>${badge}</div>
             <div class="card-body">${escapeHtml(a.body || "")}</div>
-            <div class="card-meta">${this.fmtDate(a.createdAt)}</div>
+            <div class="card-meta">${this.fmtDate(a.createdAt)}${a.expiresAt ? " · Geçerlilik: " + this.fmtDate(a.expiresAt) : ""}</div>
           </div>`;
         }).join("");
       }, (err) => { console.error(err); this.toast("Duyurular yüklenemedi.", "error"); });
@@ -868,28 +952,50 @@ const App = {
     }
   },
 
-  /* ---- Duyurular ---- */
+  /* ---- Duyurular ----
+     Duyuru oluştururken opsiyonel bir "geçerlilik bitiş tarihi/saati"
+     girilebilir. Bu süre dolduğunda duyuru silinmez, sadece hem mağaza hem
+     Yönetim'in "Aktif" listesinden otomatik kalkar (düşer); Yönetim
+     "Süresi Geçmiş" sekmesinden geçmiş duyuruları yine görüp silebilir. */
   adminAnnouncements(c) {
-    c.innerHTML = `<div class="section-title">Yayınlanan Duyurular</div><div id="admin-ann-list"></div>`;
+    this._annView = this._annView || "active";
+    c.innerHTML = `
+      <div class="pill-tabs">
+        <button class="${this._annView === "active" ? "active" : ""}" onclick="App.setAnnouncementsView('active')">Aktif</button>
+        <button class="${this._annView === "expired" ? "active" : ""}" onclick="App.setAnnouncementsView('expired')">Süresi Geçmiş</button>
+      </div>
+      <div id="admin-ann-list"></div>`;
     c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openAnnouncementForm()">＋</button>`);
     const list = document.getElementById("admin-ann-list");
     const unsub = db.collection("announcements").orderBy("createdAt", "desc").onSnapshot((snap) => {
-      if (snap.empty) {
-        list.innerHTML = `<div class="empty-state"><span class="emoji">📣</span>Henüz duyuru yayınlamadınız.<br>Sağ alttaki + butonuyla ilk duyurunuzu yayınlayın.</div>`;
+      const now = Date.now();
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs = docs.filter(a => {
+        const expired = a.expiresAt && tsVal(a.expiresAt) <= now;
+        return this._annView === "expired" ? expired : !expired;
+      });
+      if (docs.length === 0) {
+        list.innerHTML = this._annView === "expired"
+          ? `<div class="empty-state"><span class="emoji">🗓️</span>Süresi geçmiş duyuru yok.</div>`
+          : `<div class="empty-state"><span class="emoji">📣</span>Henüz duyuru yayınlamadınız.<br>Sağ alttaki + butonuyla ilk duyurunuzu yayınlayın.</div>`;
         return;
       }
-      list.innerHTML = snap.docs.map((d) => {
-        const a = d.data();
+      list.innerHTML = docs.map((a) => {
         const badge = a.priority === "Önemli" ? `<span class="badge important">Önemli</span>` : `<span class="badge normal">Duyuru</span>`;
         return `<div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(a.title)}</div>${badge}</div>
           <div class="card-body">${escapeHtml(a.body)}</div>
-          <div class="card-meta">${this.fmtDate(a.createdAt)}</div>
-          <button class="icon-action danger" style="margin-top:10px" onclick="App.deleteAnnouncement('${d.id}')">Duyuruyu Kaldır</button>
+          <div class="card-meta">${this.fmtDate(a.createdAt)}${a.expiresAt ? " · Geçerlilik: " + this.fmtDate(a.expiresAt) : ""}</div>
+          <button class="icon-action danger" style="margin-top:10px" onclick="App.deleteAnnouncement('${a.id}')">Duyuruyu Kaldır</button>
         </div>`;
       }).join("");
     }, (err) => { console.error(err); this.toast("Duyurular yüklenemedi.", "error"); });
     this.unsubs.push(unsub);
+  },
+
+  setAnnouncementsView(v) {
+    this._annView = v;
+    this.renderAdminTab();
   },
 
   openAnnouncementForm() {
@@ -900,6 +1006,7 @@ const App = {
       <div class="field"><label>Öncelik</label>
         <select id="an-priority"><option>Normal</option><option>Önemli</option></select>
       </div>
+      <div class="field"><label>Geçerlilik Bitiş Tarihi/Saati (opsiyonel)</label><input id="an-expires" type="datetime-local" /></div>
       <button class="btn" onclick="App.submitAnnouncement()">Yayınla</button>
     `);
   },
@@ -908,12 +1015,17 @@ const App = {
     const title = document.getElementById("an-title").value.trim();
     const body = document.getElementById("an-body").value.trim();
     const priority = document.getElementById("an-priority").value;
+    const expiresVal = document.getElementById("an-expires").value;
     if (!title || !body) return this.toast("Başlık ve içerik zorunludur.", "error");
     try {
-      await db.collection("announcements").add({
+      const data = {
         title, body, priority,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      if (expiresVal) {
+        data.expiresAt = firebase.firestore.Timestamp.fromDate(new Date(expiresVal));
+      }
+      await db.collection("announcements").add(data);
       closeModal();
       this.toast("Duyuru yayınlandı.", "success");
       this.sendAnnouncementPush(title, priority);
