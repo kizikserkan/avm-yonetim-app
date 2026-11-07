@@ -152,7 +152,13 @@ const App = {
   },
 
   /* ---------------------------------------------------------------- */
-  /* TENANT LOGIN (ana giriş ekranı)                                    */
+  /* GİRİŞ (tek ekran — mağaza, teknik personel, yönetim hepsi burada)  */
+  /* Kullanıcı adı + şifre girilir; hangi rol olduğu otomatik anlaşılır:*/
+  /* "yonetim" → Yönetim (admin/main), büyük harfe çevrilip "stores"    */
+  /* koleksiyonunda aranır → Mağaza, bulunamazsa küçük harfe çevrilip   */
+  /* "teknikPersonel" koleksiyonunda aranır → Teknik Ekip. Ayrı giriş   */
+  /* ekranları/butonları olduğu için eskiden gerekli olan görsel ayrım  */
+  /* ihtiyacı da böylece ortadan kalkmış oluyor.                        */
   /* ---------------------------------------------------------------- */
   renderTenantLogin() {
     this.clearListeners();
@@ -160,35 +166,77 @@ const App = {
       <div class="auth-screen">
         <div class="auth-card">
           <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
-          <div class="auth-title">Mağaza Girişi</div>
-          <div class="auth-sub">Yönetimin size verdiği mağaza kodu ve şifre ile giriş yapın</div>
-          <div class="field"><label>Mağaza Kodu</label><input id="t-code" autocapitalize="characters" placeholder="Örn: M101" /></div>
-          <div class="field"><label>Şifre (PIN)</label><input id="t-pin" type="password" inputmode="numeric" placeholder="••••" /></div>
-          <button class="btn" onclick="App.tenantLogin()">Giriş Yap</button>
+          <div class="auth-title">Giriş Yap</div>
+          <div class="auth-sub">Kullanıcı adınızı ve şifrenizi girin</div>
+          <div class="field"><label>Kullanıcı Adı</label><input id="u-user" autocapitalize="none" placeholder="Mağaza kodu veya kullanıcı adı" /></div>
+          <div class="field"><label>Şifre</label><input id="u-pw" type="password" placeholder="••••••" /></div>
+          <button class="btn" onclick="App.unifiedLogin()">Giriş Yap</button>
           <button class="btn block-link" onclick="App.openForgotPinForm()">Şifremi unuttum?</button>
-          <div class="staff-login-divider"><span>Personel / Yönetim</span></div>
-          <button class="btn block-link staff-link" onclick="App.renderAdminLogin()">Yönetim Girişi</button>
-          <button class="btn block-link staff-link" onclick="App.renderTechnicianLogin()">Teknik Ekip Girişi</button>
         </div>
       </div>`;
-    document.getElementById("t-code").focus();
+    document.getElementById("u-user").focus();
   },
 
-  async tenantLogin() {
-    const code = document.getElementById("t-code").value.trim().toUpperCase();
-    const pin = document.getElementById("t-pin").value.trim();
-    if (!code || !pin) return this.toast("Lütfen mağaza kodu ve şifreyi girin.", "error");
+  async unifiedLogin() {
+    const username = document.getElementById("u-user").value.trim();
+    const pw = document.getElementById("u-pw").value;
+    if (!username || !pw) return this.toast("Lütfen kullanıcı adı ve şifreyi girin.", "error");
+    const lower = username.toLowerCase();
     try {
-      const doc = await db.collection("stores").doc(code).get();
-      if (!doc.exists) return this.toast("Mağaza kodu bulunamadı.", "error");
-      const data = doc.data();
-      if (String(data.pin) !== pin) return this.toast("Şifre hatalı.", "error");
-      this.session = { role: "tenant", storeCode: code, storeName: data.name || code };
-      localStorage.setItem("avm_session", JSON.stringify(this.session));
-      this.tab = "duyurular";
-      this.toast("Hoş geldiniz, " + this.session.storeName, "success");
-      this.renderTenantShell();
-      this.tagPushRoleIfNeeded();
+      /* 1) Yönetim — sabit "yonetim" kullanıcı adı, admin/main dokümanına bakar. */
+      if (lower === "yonetim") {
+        const ref = db.collection("admin").doc("main");
+        const doc = await ref.get();
+        let data;
+        if (!doc.exists) {
+          // İlk kurulum: girilen şifre yönetici şifresi olarak kaydedilir.
+          data = { password: pw, createdAt: firebase.firestore.FieldValue.serverTimestamp() };
+          await ref.set(data);
+          this.toast("Yönetici şifresi bu girişle oluşturuldu.", "success");
+        } else {
+          data = doc.data();
+          if (String(data.password) !== pw) return this.toast("Kullanıcı adı veya şifre hatalı.", "error");
+        }
+        // Şifre doğruysa, iki aşamalı doğrulama (2FA) devreye girer: daha önce
+        // kurulduysa kod sorulur, kurulmadıysa önce kurulum ekranı gösterilir.
+        if (data.totpEnabled && data.totpSecret) {
+          this.render2faVerify(data.totpSecret);
+        } else {
+          this.render2faSetup();
+        }
+        return;
+      }
+
+      /* 2) Mağaza — kullanıcı adı büyük harfe çevrilip "stores" belge ID'si olarak aranır. */
+      const storeDoc = await db.collection("stores").doc(username.toUpperCase()).get();
+      if (storeDoc.exists) {
+        const data = storeDoc.data();
+        if (String(data.pin) !== pw) return this.toast("Kullanıcı adı veya şifre hatalı.", "error");
+        const code = username.toUpperCase();
+        this.session = { role: "tenant", storeCode: code, storeName: data.name || code };
+        localStorage.setItem("avm_session", JSON.stringify(this.session));
+        this.tab = "duyurular";
+        this.toast("Hoş geldiniz, " + this.session.storeName, "success");
+        this.renderTenantShell();
+        this.tagPushRoleIfNeeded();
+        return;
+      }
+
+      /* 3) Teknik Personel — kullanıcı adı küçük harfe çevrilip "teknikPersonel" belge ID'si olarak aranır. */
+      const tkDoc = await db.collection("teknikPersonel").doc(lower).get();
+      if (tkDoc.exists) {
+        const data = tkDoc.data();
+        if (String(data.password) !== pw) return this.toast("Kullanıcı adı veya şifre hatalı.", "error");
+        this.session = { role: "teknisyen", technicianId: lower, technicianName: data.fullName || lower };
+        localStorage.setItem("avm_session", JSON.stringify(this.session));
+        this.tab = "arizalar";
+        this.toast("Hoş geldiniz, " + this.session.technicianName, "success");
+        this.renderTechnicianShell();
+        this.tagPushRoleIfNeeded();
+        return;
+      }
+
+      this.toast("Kullanıcı adı veya şifre hatalı.", "error");
     } catch (e) {
       console.error(e);
       this.toast("Giriş yapılamadı: " + e.message, "error");
@@ -250,53 +298,6 @@ const App = {
   },
 
   /* ---------------------------------------------------------------- */
-  /* ADMIN LOGIN                                                        */
-  /* ---------------------------------------------------------------- */
-  renderAdminLogin() {
-    this.el.innerHTML = `
-      <div class="auth-screen">
-        <div class="auth-card">
-          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
-          <div class="auth-title">Yönetim Girişi</div>
-          <div class="auth-sub">AVM yönetim şifrenizi girin</div>
-          <div class="field"><label>Şifre</label><input id="a-pw" type="password" placeholder="••••••" /></div>
-          <button class="btn" onclick="App.adminLogin()">Giriş Yap</button>
-          <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Mağaza girişine dön</button>
-        </div>
-      </div>`;
-    document.getElementById("a-pw").focus();
-  },
-
-  async adminLogin() {
-    const pw = document.getElementById("a-pw").value;
-    if (!pw) return this.toast("Lütfen şifre girin.", "error");
-    try {
-      const ref = db.collection("admin").doc("main");
-      const doc = await ref.get();
-      let data;
-      if (!doc.exists) {
-        // İlk kurulum: girilen şifre yönetici şifresi olarak kaydedilir.
-        data = { password: pw, createdAt: firebase.firestore.FieldValue.serverTimestamp() };
-        await ref.set(data);
-        this.toast("Yönetici şifresi bu girişle oluşturuldu.", "success");
-      } else {
-        data = doc.data();
-        if (String(data.password) !== pw) return this.toast("Şifre hatalı.", "error");
-      }
-      // Şifre doğruysa, iki aşamalı doğrulama (2FA) devreye girer: daha önce
-      // kurulduysa kod sorulur, kurulmadıysa önce kurulum ekranı gösterilir.
-      if (data.totpEnabled && data.totpSecret) {
-        this.render2faVerify(data.totpSecret);
-      } else {
-        this.render2faSetup();
-      }
-    } catch (e) {
-      console.error(e);
-      this.toast("Giriş yapılamadı: " + e.message, "error");
-    }
-  },
-
-  /* ---------------------------------------------------------------- */
   /* YÖNETİM GİRİŞİ — İKİ AŞAMALI DOĞRULAMA (2FA / TOTP)                */
   /* Şifre doğrulandıktan sonraki ikinci adım. Google Authenticator,    */
   /* Microsoft Authenticator vb. standart TOTP uygulamalarıyla uyumludur.*/
@@ -314,7 +315,7 @@ const App = {
           <div class="field"><label>QR okutamıyorsanız, manuel giriş anahtarı</label><input value="${this._pendingTotpSecret}" readonly onclick="this.select()" /></div>
           <div class="field"><label>Uygulamadaki 6 Haneli Kod</label><input id="totp-code" inputmode="numeric" maxlength="6" placeholder="000000" /></div>
           <button class="btn" onclick="App.confirmTotpSetup()">Onayla ve Girişi Tamamla</button>
-          <button class="btn block-link" onclick="App.renderAdminLogin()">‹ Geri dön</button>
+          <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Geri dön</button>
         </div>
       </div>`;
     if (window.QRious) {
@@ -353,7 +354,7 @@ const App = {
           <div class="auth-sub">Doğrulama uygulamanızdaki 6 haneli kodu girin</div>
           <div class="field"><label>6 Haneli Kod</label><input id="totp-code" inputmode="numeric" maxlength="6" placeholder="000000" /></div>
           <button class="btn" onclick="App.verifyTotpLogin()">Giriş Yap</button>
-          <button class="btn block-link" onclick="App.renderAdminLogin()">‹ Geri dön</button>
+          <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Geri dön</button>
         </div>
       </div>`;
     document.getElementById("totp-code").focus();
@@ -372,46 +373,6 @@ const App = {
     this.tab = "magazalar";
     this.renderAdminShell();
     this.tagPushRoleIfNeeded();
-  },
-
-  /* ---------------------------------------------------------------- */
-  /* TEKNİK EKİP GİRİŞİ                                                 */
-  /* ---------------------------------------------------------------- */
-  renderTechnicianLogin() {
-    this.el.innerHTML = `
-      <div class="auth-screen">
-        <div class="auth-card">
-          <img class="auth-logo-img" src="img/logo.png" alt="Afium" />
-          <div class="auth-title">Teknik Ekip Girişi</div>
-          <div class="auth-sub">Yönetimin size verdiği kullanıcı adı ve şifre ile giriş yapın</div>
-          <div class="field"><label>Kullanıcı Adı</label><input id="tk-user" autocapitalize="none" placeholder="Kullanıcı adınız" /></div>
-          <div class="field"><label>Şifre</label><input id="tk-pw" type="password" placeholder="••••••" /></div>
-          <button class="btn" onclick="App.technicianLogin()">Giriş Yap</button>
-          <button class="btn block-link" onclick="App.renderTenantLogin()">‹ Mağaza girişine dön</button>
-        </div>
-      </div>`;
-    document.getElementById("tk-user").focus();
-  },
-
-  async technicianLogin() {
-    const username = document.getElementById("tk-user").value.trim().toLowerCase();
-    const pw = document.getElementById("tk-pw").value;
-    if (!username || !pw) return this.toast("Lütfen kullanıcı adı ve şifreyi girin.", "error");
-    try {
-      const doc = await db.collection("teknikPersonel").doc(username).get();
-      if (!doc.exists) return this.toast("Kullanıcı adı bulunamadı.", "error");
-      const data = doc.data();
-      if (String(data.password) !== pw) return this.toast("Şifre hatalı.", "error");
-      this.session = { role: "teknisyen", technicianId: username, technicianName: data.fullName || username };
-      localStorage.setItem("avm_session", JSON.stringify(this.session));
-      this.tab = "arizalar";
-      this.toast("Hoş geldiniz, " + this.session.technicianName, "success");
-      this.renderTechnicianShell();
-      this.tagPushRoleIfNeeded();
-    } catch (e) {
-      console.error(e);
-      this.toast("Giriş yapılamadı: " + e.message, "error");
-    }
   },
 
   /* ---------------------------------------------------------------- */
@@ -434,8 +395,11 @@ const App = {
           <button class="icon-btn" onclick="App.logout()">Çıkış</button>
         </div>
         <div class="content" id="tenant-content"></div>
-        <div class="bottomnav">
-          ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setTenantTab('${t.key}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("")}
+        <div class="bottomnav-wrap">
+          <div class="bottomnav">
+            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setTenantTab('${t.key}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("")}
+          </div>
+          <div class="app-footer">Powered by KzkSistem</div>
         </div>
       </div>`;
     this.renderTenantTab();
@@ -652,7 +616,8 @@ const App = {
     const tabs = [
       { key: "magazalar", ic: "🏪", label: "Mağazalar" },
       { key: "arizalar", ic: "🔧", label: "Arızalar" },
-      { key: "personel", ic: "🧑‍💼", label: "Personel" },
+      { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
+      { key: "teknikPersonel", ic: "👷", label: "Teknik Personel" },
       { key: "duyurular", ic: "📣", label: "Duyurular" }
     ];
     this.el.innerHTML = `
@@ -665,8 +630,11 @@ const App = {
           </div>
         </div>
         <div class="content" id="admin-content"></div>
-        <div class="bottomnav">
-          ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setAdminTab('${t.key}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("")}
+        <div class="bottomnav-wrap">
+          <div class="bottomnav">
+            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setAdminTab('${t.key}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("")}
+          </div>
+          <div class="app-footer">Powered by KzkSistem</div>
         </div>
       </div>`;
     this.renderAdminTab();
@@ -708,7 +676,8 @@ const App = {
     const c = document.getElementById("admin-content");
     if (this.tab === "magazalar") this.adminStores(c);
     else if (this.tab === "arizalar") this.adminTickets(c);
-    else if (this.tab === "personel") this.adminPersonnel(c);
+    else if (this.tab === "magazaPersonel") this.adminMagazaPersonelTab(c);
+    else if (this.tab === "teknikPersonel") this.adminTeknikPersonelTab(c);
     else if (this.tab === "duyurular") this.adminAnnouncements(c);
   },
 
@@ -893,28 +862,21 @@ const App = {
   /* İki ayrı liste var: mağazaların bildirdiği kendi personeli (salt okunur,
      "personnel" koleksiyonu) ve Yönetim'in AVM'nin kendi teknik/bakım
      personelini kaydettiği liste ("teknikPersonel" koleksiyonu — buradan
-     ekleme/düzenleme/silme yapılabilir). İkisi arasında pill-tab ile geçiş
-     yapılır. */
-  adminPersonnel(c) {
-    this._personnelView = this._personnelView || "magaza";
+     ekleme/düzenleme/silme yapılabilir). Karışmasınlar diye alt menüde
+     ayrı birer ikonları var; pill-tab yok artık. */
+  adminMagazaPersonelTab(c) {
     c.innerHTML = `
-      <div class="pill-tabs">
-        <button class="${this._personnelView === "magaza" ? "active" : ""}" onclick="App.setPersonnelView('magaza')">Mağaza Personeli</button>
-        <button class="${this._personnelView === "teknik" ? "active" : ""}" onclick="App.setPersonnelView('teknik')">Teknik Personel</button>
-      </div>
+      <div class="section-title">Mağazalardan Gelen Personel Bildirimleri</div>
       <div id="admin-pers-list"></div>`;
-    const list = document.getElementById("admin-pers-list");
-    if (this._personnelView === "teknik") {
-      c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openTeknikPersonelForm()">＋</button>`);
-      this.adminTeknikPersonelList(list);
-    } else {
-      this.adminStorePersonnelList(list);
-    }
+    this.adminStorePersonnelList(document.getElementById("admin-pers-list"));
   },
 
-  setPersonnelView(v) {
-    this._personnelView = v;
-    this.renderAdminTab();
+  adminTeknikPersonelTab(c) {
+    c.innerHTML = `
+      <div class="section-title">Teknik Personel</div>
+      <div id="admin-pers-list"></div>`;
+    c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openTeknikPersonelForm()">＋</button>`);
+    this.adminTeknikPersonelList(document.getElementById("admin-pers-list"));
   },
 
   adminStorePersonnelList(list) {
@@ -1166,6 +1128,7 @@ const App = {
           <button class="icon-btn" onclick="App.logout()">Çıkış</button>
         </div>
         <div class="content" id="tech-content"></div>
+        <div class="app-footer-standalone">Powered by KzkSistem</div>
       </div>`;
     this.technicianTickets(document.getElementById("tech-content"));
   },
