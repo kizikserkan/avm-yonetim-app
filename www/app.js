@@ -224,6 +224,7 @@ const App = {
       const newPin = String(Math.floor(1000 + Math.random() * 9000));
       await db.collection("stores").doc(code).update({ pin: newPin });
       await db.collection("pinResets").add({
+        tenantId: TENANT_ID,
         storeCode: code,
         storeName: data.name || code,
         email: storedEmail,
@@ -460,7 +461,7 @@ const App = {
         const now = Date.now();
         const docs = snap.docs.filter(d => {
           const a = d.data();
-          return !a.expiresAt || tsVal(a.expiresAt) > now;
+          return belongsToTenant(a) && (!a.expiresAt || tsVal(a.expiresAt) > now);
         });
         if (docs.length === 0) {
           list.innerHTML = `<div class="empty-state"><span class="emoji">📭</span>Henüz duyuru yok.</div>`;
@@ -488,12 +489,13 @@ const App = {
     const list = document.getElementById("ticket-list");
     const unsub = db.collection("tickets").where("storeCode", "==", this.session.storeCode)
       .onSnapshot((snap) => {
-        if (snap.empty) {
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(belongsToTenant)
+          .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
+        if (docs.length === 0) {
           list.innerHTML = `<div class="empty-state"><span class="emoji">✅</span>Aktif arıza bildiriminiz yok.<br>Sağ alttaki + butonuyla yeni bildirim oluşturun.</div>`;
           return;
         }
-        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
         list.innerHTML = docs.map((t) => {
           const st = STATUSES.find(s => s.key === t.status) || STATUSES[0];
           return `<div class="card">
@@ -527,6 +529,7 @@ const App = {
     if (!description) return this.toast("Lütfen açıklama girin.", "error");
     try {
       await db.collection("tickets").add({
+        tenantId: TENANT_ID,
         storeCode: this.session.storeCode,
         storeName: this.session.storeName,
         category, description,
@@ -627,6 +630,7 @@ const App = {
     if (!/^\d{11}$/.test(tc)) return this.toast("Lütfen 11 haneli geçerli bir T.C. kimlik no girin.", "error");
     try {
       await db.collection("personnel").add({
+        tenantId: TENANT_ID,
         storeCode: this.session.storeCode,
         storeName: this.session.storeName,
         fullName, tc, startDate, note,
@@ -718,11 +722,12 @@ const App = {
     c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openStoreForm()">＋</button>`);
     const list = document.getElementById("store-list");
     const unsub = db.collection("stores").onSnapshot((snap) => {
-      if (snap.empty) {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "", "tr"));
+      if (docs.length === 0) {
         list.innerHTML = `<div class="empty-state"><span class="emoji">🏪</span>Henüz mağaza eklenmedi.<br>Sağ alttaki + butonuyla mağaza ekleyin.</div>`;
         return;
       }
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || "", "tr"));
       this._storesData = docs;
       list.innerHTML = docs.map((s) => `
         <div class="list-item">
@@ -742,11 +747,12 @@ const App = {
     const prList = document.getElementById("pin-reset-list");
     const unsub2 = db.collection("pinResets").orderBy("createdAt", "desc").limit(20)
       .onSnapshot((snap) => {
-        if (snap.empty) {
+        const docs = snap.docs.filter(d => belongsToTenant(d.data()));
+        if (docs.length === 0) {
           prList.innerHTML = `<div class="empty-state"><span class="emoji">🔑</span>Henüz şifre sıfırlama talebi olmadı.</div>`;
           return;
         }
-        prList.innerHTML = snap.docs.map((d) => {
+        prList.innerHTML = docs.map((d) => {
           const r = d.data();
           return `<div class="card">
             <div class="card-row"><div class="card-title">${escapeHtml(r.storeName || r.storeCode)}</div><span class="badge normal">${escapeHtml(r.storeCode)}</span></div>
@@ -779,6 +785,7 @@ const App = {
     if (!code || !name || !pin) return this.toast("Kod, ad ve şifre zorunludur.", "error");
     try {
       await db.collection("stores").doc(code).set({
+        tenantId: TENANT_ID,
         code, name, pin, phone, email,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -843,7 +850,7 @@ const App = {
       <div id="admin-ticket-list"></div>`;
     const list = document.getElementById("admin-ticket-list");
     const unsub = db.collection("tickets").onSnapshot((snap) => {
-      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant);
       if (this._ticketFilter !== "all") docs = docs.filter(t => t.status === this._ticketFilter);
       docs.sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
       if (docs.length === 0) {
@@ -912,11 +919,12 @@ const App = {
 
   adminStorePersonnelList(list) {
     const unsub = db.collection("personnel").onSnapshot((snap) => {
-      if (snap.empty) {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
+        .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
+      if (docs.length === 0) {
         list.innerHTML = `<div class="empty-state"><span class="emoji">🧑‍💼</span>Henüz personel bildirimi yok.</div>`;
         return;
       }
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
       list.innerHTML = docs.map((p) => `
         <div class="card">
           <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.storeName)}</span></div>
@@ -935,11 +943,12 @@ const App = {
      bu yüzden tekil olmak zorunda ve giriş sırasında doğrudan aranır. */
   adminTeknikPersonelList(list) {
     const unsub = db.collection("teknikPersonel").onSnapshot((snap) => {
-      if (snap.empty) {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
+        .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "tr"));
+      if (docs.length === 0) {
         list.innerHTML = `<div class="empty-state"><span class="emoji">🔧</span>Henüz teknik personel eklenmedi.<br>Sağ alttaki + butonuyla ekleyin.</div>`;
         return;
       }
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "tr"));
       this._teknikPersonelData = docs;
       list.innerHTML = docs.map((p) => `
         <div class="list-item">
@@ -986,6 +995,7 @@ const App = {
         const existing = await db.collection("teknikPersonel").doc(username).get();
         if (existing.exists) return this.toast("Bu kullanıcı adı zaten kullanılıyor, başka bir tane seçin.", "error");
         await db.collection("teknikPersonel").doc(username).set({
+          tenantId: TENANT_ID,
           fullName, password, phone, startDate, note,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -1025,7 +1035,7 @@ const App = {
     const list = document.getElementById("admin-ann-list");
     const unsub = db.collection("announcements").orderBy("createdAt", "desc").onSnapshot((snap) => {
       const now = Date.now();
-      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant);
       docs = docs.filter(a => {
         const expired = a.expiresAt && tsVal(a.expiresAt) <= now;
         return this._annView === "expired" ? expired : !expired;
@@ -1075,6 +1085,7 @@ const App = {
     if (!title || !body) return this.toast("Başlık ve içerik zorunludur.", "error");
     try {
       const data = {
+        tenantId: TENANT_ID,
         title, body, priority,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
@@ -1097,7 +1108,7 @@ const App = {
     if (typeof EMAILJS_ANNOUNCEMENT_TEMPLATE_ID === "undefined" || EMAILJS_ANNOUNCEMENT_TEMPLATE_ID.startsWith("BURAYA")) return;
     try {
       const snap = await db.collection("stores").get();
-      const stores = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => s.email);
+      const stores = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant).filter(s => s.email);
       for (const s of stores) {
         try {
           await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_ANNOUNCEMENT_TEMPLATE_ID, {
@@ -1170,7 +1181,7 @@ const App = {
       <div id="tech-ticket-list"></div>`;
     const list = document.getElementById("tech-ticket-list");
     const unsub = db.collection("tickets").onSnapshot((snap) => {
-      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant);
       if (this._techFilter !== "all") docs = docs.filter(t => t.status === this._techFilter);
       docs.sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
       this._techTicketsData = docs;
@@ -1248,6 +1259,14 @@ function tsVal(ts) {
   if (!ts) return 0;
   if (ts.toDate) return ts.toDate().getTime();
   return new Date(ts).getTime();
+}
+
+/* Çok kiracılı (multi-tenant) altyapıya ileride geçiş için: bir kaydın bu
+   AVM'ye (TENANT_ID) ait olup olmadığını kontrol eder. Henüz tenantId
+   alanı olmayan eski kayıtlar da (bu alan eklenmeden önce oluşturulmuş
+   olabilirler) geriye dönük uyumluluk için "bu AVM'ye ait" sayılır. */
+function belongsToTenant(data) {
+  return !data.tenantId || data.tenantId === TENANT_ID;
 }
 
 function escapeHtml(str) {
