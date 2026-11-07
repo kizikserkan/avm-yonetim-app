@@ -316,8 +316,12 @@ const App = {
           <button class="btn block-link" onclick="App.renderAdminLogin()">‹ Geri dön</button>
         </div>
       </div>`;
-    if (window.QRCode) {
-      QRCode.toCanvas(document.getElementById("totp-qr"), uri, { width: 190, margin: 1 }, (err) => { if (err) console.error(err); });
+    if (window.QRious) {
+      try {
+        new QRious({ element: document.getElementById("totp-qr"), value: uri, size: 190 });
+      } catch (e) {
+        console.error("QR kod oluşturulamadı:", e);
+      }
     }
   },
 
