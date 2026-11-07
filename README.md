@@ -338,6 +338,39 @@ Service ve **iki** Email Template (şifre sıfırlama + duyuru) oluşturup,
 dördünü de bu dosyaya yapıştırmanız gerekiyor — dosyanın en üstündeki
 adımları takip edebilirsiniz.
 
+### Duyurularda geçerlilik bitiş tarihi
+
+Yeni bir duyuru yayınlarken artık opsiyonel bir **"Geçerlilik Bitiş
+Tarihi/Saati"** girilebiliyor. Bu alan boş bırakılırsa duyuru eskisi gibi
+süresiz görünür. Bir tarih/saat girilirse, o an geçtiğinde duyuru
+**silinmez** ama hem mağazaların hem Yönetim'in gördüğü aktif duyuru
+listesinden otomatik olarak kalkar. Yönetim panelinde "Duyurular"
+sekmesine artık **Aktif / Süresi Geçmiş** şeklinde iki sekme eklendi —
+süresi geçmiş bir duyuruyu görmek veya kalıcı olarak silmek isterseniz
+"Süresi Geçmiş" sekmesinden ulaşabilirsiniz.
+
+### Yönetim girişinde iki aşamalı doğrulama (2FA)
+
+Yönetim şifresi doğru girildikten sonra artık ikinci bir adım daha var:
+Google Authenticator, Microsoft Authenticator veya benzeri bir
+doğrulama uygulamasından alınan 6 haneli kod.
+
+- **İlk kurulum:** Şifreyle giriş yaptığınızda, henüz 2FA kurulmamışsa
+  ekranda bir QR kod ve "manuel giriş anahtarı" belirir. Telefonunuzda
+  bir doğrulayıcı (authenticator) uygulaması açıp bu QR kodu okutun (veya
+  anahtarı elle girin); uygulamada beliren 6 haneli kodu girip
+  onayladığınızda kurulum tamamlanır ve girişiniz biter.
+- **Sonraki girişler:** Şifreden sonra doğrudan "6 haneli kod" ekranı
+  gelir; doğrulayıcı uygulamanızdaki güncel kodu girersiniz.
+- **Telefonu/uygulamayı kaybederseniz:** Yönetim şifresinde olduğu gibi,
+  kurtarma yolu Firebase Console'dur. Firestore → `admin/main` belgesine
+  gidip `totpSecret` ve `totpEnabled` alanlarını silin (veya
+  `totpEnabled` değerini `false` yapın); bir sonraki girişte 2FA kurulum
+  ekranı yeniden açılır ve yeni bir telefon/uygulama ile kurabilirsiniz.
+  Şifrenin kendisi bundan etkilenmez.
+- Bu özellik yalnızca **Yönetim girişi** içindir, mağaza ve Teknik Ekip
+  girişlerinde 2FA yoktur.
+
 ---
 
 ## Güncelleme yapmak isterseniz
