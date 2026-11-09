@@ -290,7 +290,7 @@ adının bir teknik personel kaydı olduğunu otomatik tanır ve Yönetim'den
 tamamen ayrı, daha sınırlı bir panele yönlendirir:
 
 - Ortak bir şifre değil, **her teknik personelin kendi kullanıcı adı ve
-  şifresi** var. Bu hesaplar Yönetim panelindeki **Teknik Personel**
+  şifresi** var. Bu hesaplar Yönetim panelindeki **Personel Ekle**
   sekmesinden eklenir/düzenlenir/silinir (ad soyad, kullanıcı adı,
   şifre, telefon, işe başlama tarihi, not). Şifresini unutan bir teknik
   personel için buradan şifresini görüp değiştirebilirsiniz.
@@ -402,8 +402,32 @@ doğrulama uygulamasından alınan 6 haneli kod.
   `totpEnabled` değerini `false` yapın); bir sonraki girişte 2FA kurulum
   ekranı yeniden açılır ve yeni bir telefon/uygulama ile kurabilirsiniz.
   Şifrenin kendisi bundan etkilenmez.
-- Bu özellik yalnızca **Yönetim girişi** içindir, mağaza ve Teknik Ekip
-  girişlerinde 2FA yoktur.
+- Bu özellik **Yönetim girişi** yapan herkes içindir — ister asıl
+  `yonetim`/`admin` hesabı olsun, ister aşağıda anlatılan ek Yönetim
+  hesaplarından biri olsun. Mağaza ve Teknik Ekip girişlerinde 2FA
+  yoktur.
+
+### Birden fazla Yönetim hesabı (ek yönetici ekleme)
+
+Artık tek bir ortak Yönetim şifresiyle sınırlı değilsiniz — **Personel
+Ekle** sekmesinden, teknik personel eklerken olduğu gibi, **Rol**
+alanından **"Yönetim"** seçerek başka kişilere de kendi kullanıcı adı
+ve şifresiyle tam Yönetim yetkisi verebilirsiniz (mağaza
+ekleme/silme, arıza/duyuru yönetimi, ⚙️ ayarlar — asıl hesapla birebir
+aynı yetkiler).
+
+- Her ek Yönetim hesabı, ilk girişinde kendi 2FA'sını ayrı ayrı kurar
+  (yukarıdaki bölümdeki adımlarla aynı).
+- Giriş ekranında kendi kullanıcı adını yazarlar — `yonetim`/`admin`
+  kelimeleri asıl hesap için ayrılmıştır, yeni bir personel kaydına bu
+  isimler verilemez.
+- Panelin sağ üstündeki başlıkta, hangi Yönetim hesabıyla giriş
+  yapıldığı görünür (ör. "Yönetici Paneli · Ahmet").
+- Bir ek Yönetim hesabını silmek, teknik personeli silmekle aynıdır:
+  **Personel Ekle** listesinden "Sil" butonuna basmanız yeterli.
+- Asıl `yonetim`/`admin` hesabınız bu değişiklikten hiç etkilenmedi —
+  şifreniz ve 2FA'nız aynen çalışmaya devam ediyor; bu, tamamen üzerine
+  eklenen ek bir yetenek.
 
 ### Mağaza Personeli — mağaza mağaza gruplama ve silme
 
