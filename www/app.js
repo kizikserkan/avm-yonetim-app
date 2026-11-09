@@ -1108,6 +1108,7 @@ const App = {
         <button class="${this._ticketFilter === "cozuldu" ? "active" : ""}" onclick="App.filterTickets('cozuldu')">Çözüldü</button>
       </div>
       <div id="admin-ticket-list"></div>`;
+    c.insertAdjacentHTML("beforeend", `<button class="fab fab--standalone" onclick="App.openAdminTicketForm()">＋</button>`);
     const list = document.getElementById("admin-ticket-list");
     const unsub = db.collection("tickets").onSnapshot((snap) => {
       let docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant);
@@ -1124,6 +1125,7 @@ const App = {
           <div class="ticket-time">🕐 Açılış: ${this.fmtDate(t.createdAt)}</div>
           <div class="card-body">${escapeHtml(t.description)}</div>
           ${t.technicianNote ? `<div class="card-body"><strong>Teknik ekip notu:</strong> ${escapeHtml(t.technicianNote)}</div>` : ""}
+          ${t.manualEntry ? `<div class="card-meta">Elle girildi${t.enteredBy ? " · " + escapeHtml(t.enteredBy) : ""}${t.source ? " · Kaynak: " + escapeHtml(t.source) : ""}</div>` : ""}
           ${t.handledBy ? `<div class="card-meta">İşlemi yapan: ${escapeHtml(t.handledBy)}</div>` : ""}
           ${t.updatedAt ? `<div class="card-meta">Son güncelleme: ${this.fmtDate(t.updatedAt)}</div>` : ""}
           <div class="status-select-row">
@@ -1146,6 +1148,73 @@ const App = {
       this.toast("Durum güncellendi.", "success");
     } catch (e) {
       this.toast("Güncellenemedi: " + e.message, "error");
+    }
+  },
+
+  /* ---- Yönetim'in manuel arıza kaydı açması — uygulama dışından (e-posta,
+     telefon vb.) gelen arızalar için. Mağazanın kendisi bildirmemiş olsa
+     bile Yönetim, ilgili mağazayı seçip kaydı kendisi oluşturabilir. ---- */
+  async openAdminTicketForm() {
+    let stores = [];
+    try {
+      const snap = await db.collection("stores").get();
+      stores = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
+        .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, "tr"));
+    } catch (e) {
+      console.error(e);
+      return this.toast("Mağaza listesi alınamadı.", "error");
+    }
+    if (stores.length === 0) return this.toast("Önce en az bir mağaza eklemelisiniz.", "error");
+    this._adminTicketStores = stores;
+    openModal(`
+      <h3>Manuel Arıza Kaydı</h3>
+      <div class="auth-sub" style="text-align:left;margin:-6px 0 14px">E-posta, telefon gibi uygulama dışı kanallardan gelen arızaları buradan sisteme girebilirsiniz.</div>
+      <div class="field"><label>Mağaza</label>
+        <select id="atk-store">${stores.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`).join("")}</select>
+      </div>
+      <div class="field"><label>Kategori</label>
+        <select id="atk-cat">${CATEGORIES.map(c => `<option>${c}</option>`).join("")}</select>
+      </div>
+      <div class="field"><label>Açıklama</label>
+        <textarea id="atk-desc" placeholder="Arızayı kısaca açıklayın..."></textarea>
+      </div>
+      <div class="field"><label>Bildirim Kaynağı (opsiyonel)</label>
+        <input id="atk-source" placeholder="Örn. E-posta, Telefon" />
+      </div>
+      <div class="field"><label>Durum</label>
+        <select id="atk-status">${STATUSES.map(s => `<option value="${s.key}">${s.label}</option>`).join("")}</select>
+      </div>
+      <button class="btn" onclick="App.submitAdminTicket()">Kaydı Oluştur</button>
+    `);
+  },
+
+  async submitAdminTicket() {
+    const storeCode = document.getElementById("atk-store").value;
+    const store = (this._adminTicketStores || []).find(s => s.id === storeCode);
+    const category = document.getElementById("atk-cat").value;
+    const description = document.getElementById("atk-desc").value.trim();
+    const source = document.getElementById("atk-source").value.trim();
+    const status = document.getElementById("atk-status").value;
+    if (!store) return this.toast("Lütfen bir mağaza seçin.", "error");
+    if (!description) return this.toast("Lütfen açıklama girin.", "error");
+    try {
+      await db.collection("tickets").add({
+        tenantId: TENANT_ID,
+        storeCode: store.id,
+        storeName: store.name || store.id,
+        category, description, status,
+        source: source || null,
+        manualEntry: true,
+        enteredBy: (this.session && (this.session.adminName || this.session.adminUsername)) || "Yönetim",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      closeModal();
+      this.toast("Arıza kaydı oluşturuldu.", "success");
+      this.sendTicketPush(store.name || store.id, category);
+    } catch (e) {
+      console.error(e);
+      this.toast("Oluşturulamadı: " + e.message, "error");
     }
   },
 
