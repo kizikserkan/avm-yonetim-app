@@ -23,6 +23,7 @@ const App = {
   cache: { stores: [], tickets: [], personnel: [], announcements: [] },
 
   async init() {
+    this.applyStoredTheme();
     try {
       const raw = localStorage.getItem("avm_session");
       this.session = raw ? JSON.parse(raw) : null;
@@ -55,6 +56,35 @@ const App = {
     } else {
       this.renderTenantLogin();
     }
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* KARANLIK / AYDINLIK TEMA — tercih localStorage'da tutulur, uygulama
+     açılışında applyStoredTheme() ile <html data-theme="..."> üzerine
+     uygulanır; CSS tarafında :root[data-theme="light"] override bloğu
+     bunu okur (bkz. style.css). Giriş/splash ekranları bilerek bu
+     seçimden bağımsız, her zaman sabit renklerde kalır. */
+  applyStoredTheme() {
+    let theme = "dark";
+    try { theme = localStorage.getItem("avm_theme") || "dark"; } catch (e) {}
+    document.documentElement.setAttribute("data-theme", theme);
+  },
+
+  toggleTheme() {
+    const current = document.documentElement.getAttribute("data-theme") || "dark";
+    const next = current === "light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("avm_theme", next); } catch (e) {}
+    /* Mevcut sekmede kalmak için ilgili shell'i doğrudan yeniden çiziyoruz
+       (boot() sekmeyi varsayılana sıfırlardı). */
+    if (this.session && this.session.role === "tenant") this.renderTenantShell();
+    else if (this.session && this.session.role === "admin") this.renderAdminShell();
+    else if (this.session && this.session.role === "teknisyen") this.renderTechnicianShell();
+  },
+
+  themeToggleLabel() {
+    const current = document.documentElement.getAttribute("data-theme") || "dark";
+    return current === "light" ? "Koyu Tema" : "Açık Tema";
   },
 
   /* ---------------------------------------------------------------- */
@@ -415,7 +445,10 @@ const App = {
             <div class="title">${escapeHtml(this.session.storeName)}</div>
             <div class="sub">Mağaza Paneli</div>
           </div>
-          <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+          <div style="display:flex;gap:8px">
+            <button class="icon-btn" onclick="App.toggleTheme()">${this.themeToggleLabel()}</button>
+            <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+          </div>
         </div>
         <div class="content" id="tenant-content"></div>
         <div class="bottomnav-wrap">
@@ -720,7 +753,8 @@ const App = {
         <div class="topbar">
           <div><div class="title">Afium Portal</div><div class="sub">${escapeHtml(adminSub)}</div></div>
           <div style="display:flex;gap:8px">
-            <button class="icon-btn" onclick="App.openAdminSettingsForm()">⚙️</button>
+            <button class="icon-btn" onclick="App.toggleTheme()">${this.themeToggleLabel()}</button>
+            <button class="icon-btn" onclick="App.openAdminSettingsForm()">Ayarlar</button>
             <button class="icon-btn" onclick="App.logout()">Çıkış</button>
           </div>
         </div>
@@ -802,7 +836,6 @@ const App = {
               <span class="home-tile-label">${t.label}</span>
               <span class="home-tile-sub">${t.sub}</span>
             </span>
-            <span class="home-tile-arrow">›</span>
           </button>`).join("")}
       </div>`;
   },
@@ -1433,7 +1466,10 @@ const App = {
       <div class="shell">
         <div class="topbar">
           <div><div class="title">Afium Portal</div><div class="sub">Teknik Ekip · ${escapeHtml((this.session && this.session.technicianName) || "")}</div></div>
-          <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+          <div style="display:flex;gap:8px">
+            <button class="icon-btn" onclick="App.toggleTheme()">${this.themeToggleLabel()}</button>
+            <button class="icon-btn" onclick="App.logout()">Çıkış</button>
+          </div>
         </div>
         <div class="content" id="tech-content"></div>
         <div class="app-footer-standalone">Powered by KzkSistem</div>
