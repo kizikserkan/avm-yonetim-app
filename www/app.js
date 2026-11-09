@@ -403,10 +403,10 @@ const App = {
   renderTenantShell() {
     this.clearListeners();
     const tabs = [
-      { key: "duyurular", ic: "📣", label: "Duyurular" },
-      { key: "ariza", ic: "🔧", label: "Arıza" },
-      { key: "personel", ic: "🧑‍💼", label: "Personel" },
-      { key: "tesis", ic: "🏗️", label: "Tadilat/Sayım" }
+      { key: "duyurular", label: "Duyurular" },
+      { key: "ariza", label: "Arıza" },
+      { key: "personel", label: "Personel" },
+      { key: "tesis", label: "Tadilat/Sayım" }
     ];
     this.el.innerHTML = `
       <div class="shell">
@@ -420,7 +420,7 @@ const App = {
         <div class="content" id="tenant-content"></div>
         <div class="bottomnav-wrap">
           <div class="bottomnav">
-            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setTenantTab('${t.key}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("")}
+            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setTenantTab('${t.key}')">${t.label}</button>`).join("")}
           </div>
           <div class="app-footer">Powered by KzkSistem</div>
         </div>
@@ -707,12 +707,12 @@ const App = {
   renderAdminShell() {
     this.clearListeners();
     const tabs = [
-      { key: "anasayfa", ic: "🏠", label: "Ana Sayfa" },
-      { key: "magazalar", ic: "🏪", label: "Mağazalar" },
-      { key: "arizalar", ic: "🔧", label: "Arızalar" },
-      { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
-      { key: "teknikPersonel", ic: "👷", label: "Personel Ekle" },
-      { key: "duyurular", ic: "📣", label: "Duyurular" }
+      { key: "anasayfa", label: "Ana Sayfa" },
+      { key: "magazalar", label: "Mağazalar" },
+      { key: "arizalar", label: "Arızalar" },
+      { key: "magazaPersonel", label: "Mağaza Personeli" },
+      { key: "teknikPersonel", label: "Personel Ekle" },
+      { key: "duyurular", label: "Duyurular" }
     ];
     const adminSub = (this.session && this.session.adminName) ? "Yönetici Paneli · " + this.session.adminName : "Yönetici Paneli";
     this.el.innerHTML = `
@@ -727,7 +727,7 @@ const App = {
         <div class="content" id="admin-content"></div>
         <div class="bottomnav-wrap">
           <div class="bottomnav">
-            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setAdminTab('${t.key}')"><span class="ic">${t.ic}</span>${t.label}</button>`).join("")}
+            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setAdminTab('${t.key}')">${t.label}</button>`).join("")}
           </div>
           <div class="app-footer">Powered by KzkSistem</div>
         </div>
@@ -785,21 +785,24 @@ const App = {
      bildirimleri, Arıza raporu) buradan tek tıkla açılabiliyor. ---- */
   adminHome(c) {
     const tiles = [
-      { key: "magazalar", ic: "🏪", label: "Mağazalar" },
-      { key: "arizalar", ic: "🔧", label: "Arızalar" },
-      { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
-      { key: "teknikPersonel", ic: "👷", label: "Personel Ekle" },
-      { key: "duyurular", ic: "📣", label: "Duyurular" },
-      { key: "tesisBildirim", ic: "🏗️", label: "Tadilat/Sayım Bildirimleri" },
-      { key: "arizaRapor", ic: "📊", label: "Arıza Raporu" }
+      { key: "magazalar", label: "Mağazalar", sub: "Mağaza listesi ve bilgileri", accent: "#c026d3" },
+      { key: "arizalar", label: "Arızalar", sub: "Açık ve kapalı arıza kayıtları", accent: "#ff6b5b" },
+      { key: "magazaPersonel", label: "Mağaza Personeli", sub: "Mağaza mağaza çalışan listesi", accent: "#ffb545" },
+      { key: "teknikPersonel", label: "Personel Ekle", sub: "Teknik ekip ve yönetim hesapları", accent: "#4f8bff" },
+      { key: "duyurular", label: "Duyurular", sub: "Mağazalara yapılan duyurular", accent: "#35d488" },
+      { key: "tesisBildirim", label: "Tadilat/Sayım Bildirimleri", sub: "Mağaza kaynaklı tesis bildirimleri", accent: "#8b1793" },
+      { key: "arizaRapor", label: "Arıza Raporu", sub: "Tarih aralığına göre özet rapor", accent: "#00b8d9" }
     ];
     c.innerHTML = `
       <div class="section-title">Hoş geldiniz</div>
       <div class="home-grid">
         ${tiles.map(t => `
-          <button class="home-tile" onclick="App.setAdminTab('${t.key}')">
-            <span class="home-tile-ic">${t.ic}</span>
-            <span class="home-tile-label">${t.label}</span>
+          <button class="home-tile" style="--accent:${t.accent}" onclick="App.setAdminTab('${t.key}')">
+            <span class="home-tile-text">
+              <span class="home-tile-label">${t.label}</span>
+              <span class="home-tile-sub">${t.sub}</span>
+            </span>
+            <span class="home-tile-arrow">›</span>
           </button>`).join("")}
       </div>`;
   },
