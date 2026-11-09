@@ -1029,11 +1029,24 @@ const App = {
       <h3>Yeni Mağaza Ekle</h3>
       <div class="field"><label>Mağaza Kodu</label><input id="s-code" autocapitalize="characters" placeholder="Örn: M101" /></div>
       <div class="field"><label>Mağaza Adı</label><input id="s-name" placeholder="Örn: ABC Giyim" /></div>
-      <div class="field"><label>Giriş Şifresi (PIN)</label><input id="s-pin" placeholder="Örn: 1234" /></div>
+      <div class="field">
+        <label>Giriş Şifresi (PIN)</label>
+        <div class="tc-input-wrap">
+          <input id="s-pin" value="${generatePin()}" />
+          <button type="button" class="tc-eye-btn" style="width:auto;padding:0 12px;font-size:12px;font-weight:700" onclick="App.regenPinField('s-pin')">Yeniden Oluştur</button>
+        </div>
+      </div>
       <div class="field"><label>Telefon (opsiyonel)</label><input id="s-phone" type="tel" placeholder="05xx xxx xx xx" /></div>
       <div class="field"><label>E-posta (şifre sıfırlama için gerekli)</label><input id="s-email" type="email" placeholder="magaza@eposta.com" /></div>
       <button class="btn" onclick="App.submitStore()">Mağazayı Kaydet</button>
     `);
+  },
+
+  /* Yeni mağaza/personel formlarında otomatik doldurulan PIN'i, admin
+     isterse tek tıkla başka bir rastgele PIN ile değiştirebilsin diye. */
+  regenPinField(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = generatePin();
   },
 
   async submitStore() {
@@ -1064,7 +1077,13 @@ const App = {
       <h3>Mağazayı Düzenle</h3>
       <div class="field"><label>Mağaza Kodu</label><input value="${escapeHtml(s.id)}" disabled /></div>
       <div class="field"><label>Mağaza Adı</label><input id="es-name" value="${escapeHtml(s.name || "")}" /></div>
-      <div class="field"><label>Giriş Şifresi (PIN)</label><input id="es-pin" value="${escapeHtml(String(s.pin || ""))}" /></div>
+      <div class="field">
+        <label>Giriş Şifresi (PIN)</label>
+        <div class="tc-input-wrap">
+          <input id="es-pin" value="${escapeHtml(String(s.pin || ""))}" />
+          <button type="button" class="tc-eye-btn" style="width:auto;padding:0 12px;font-size:12px;font-weight:700" onclick="App.regenPinField('es-pin')">Yeniden Oluştur</button>
+        </div>
+      </div>
       <div class="field"><label>Telefon (opsiyonel)</label><input id="es-phone" type="tel" value="${escapeHtml(s.phone || "")}" /></div>
       <div class="field"><label>E-posta (şifre sıfırlama için gerekli)</label><input id="es-email" type="email" value="${escapeHtml(s.email || "")}" /></div>
       <button class="btn" onclick="App.submitEditStore('${s.id}')">Kaydet</button>
@@ -1332,7 +1351,13 @@ const App = {
       </div>
       <div class="field"><label>Kullanıcı Adı (girişte kullanılır)</label><input id="tp-user" ${p ? "disabled" : ""} value="${p ? escapeHtml(p.id) : ""}" autocapitalize="none" placeholder="Örn: ahmet.teknik" /></div>
       <div class="field"><label>Ad Soyad</label><input id="tp-name" value="${p ? escapeHtml(p.fullName || "") : ""}" placeholder="Ad Soyad" /></div>
-      <div class="field"><label>Giriş Şifresi</label><input id="tp-pw" value="${p ? escapeHtml(p.password || "") : ""}" placeholder="Örn: 1234" /></div>
+      <div class="field">
+        <label>Giriş Şifresi</label>
+        <div class="tc-input-wrap">
+          <input id="tp-pw" value="${p ? escapeHtml(p.password || "") : generatePin()}" />
+          <button type="button" class="tc-eye-btn" style="width:auto;padding:0 12px;font-size:12px;font-weight:700" onclick="App.regenPinField('tp-pw')">Yeniden Oluştur</button>
+        </div>
+      </div>
       <div class="field"><label>Telefon (opsiyonel)</label><input id="tp-phone" type="tel" value="${p ? escapeHtml(p.phone || "") : ""}" placeholder="05xx xxx xx xx" /></div>
       <div class="field"><label>İşe Başlama Tarihi</label><input id="tp-date" type="date" value="${p ? escapeHtml(p.startDate || "") : ""}" /></div>
       <div class="field"><label>Not (opsiyonel)</label><textarea id="tp-note" placeholder="Varsa ek bilgi...">${p ? escapeHtml(p.note || "") : ""}</textarea></div>
@@ -1635,6 +1660,14 @@ function tsVal(ts) {
    olabilirler) geriye dönük uyumluluk için "bu AVM'ye ait" sayılır. */
 function belongsToTenant(data) {
   return !data.tenantId || data.tenantId === TENANT_ID;
+}
+
+/* Mağaza/personel girişi için rastgele 4 haneli PIN üretir — kullanıcıların
+   kendileri kolay tahmin edilir bir şifre seçmesini önlemek ve manuel şifre
+   belirleme zahmetini kaldırmak için yeni kayıt formlarında otomatik
+   dolduruluyor (admin isterse alanı elle değiştirebilir). */
+function generatePin() {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, "0");
 }
 
 function escapeHtml(str) {
