@@ -200,6 +200,8 @@ const App = {
           data = doc.data();
           if (String(data.password) !== pw) return this.toast("Kullanıcı adı veya şifre hatalı.", "error");
         }
+        this._pendingLoginRef = ref;
+        this._pendingLoginSession = { role: "admin" };
         // Şifre doğruysa, iki aşamalı doğrulama (2FA) devreye girer: daha önce
         // kurulduysa kod sorulur, kurulmadıysa önce kurulum ekranı gösterilir.
         if (data.totpEnabled && data.totpSecret) {
@@ -225,11 +227,25 @@ const App = {
         return;
       }
 
-      /* 3) Teknik Personel — kullanıcı adı küçük harfe çevrilip "teknikPersonel" belge ID'si olarak aranır. */
+      /* 3) Personel (Teknik Ekip veya Yönetim) — kullanıcı adı küçük harfe
+         çevrilip "teknikPersonel" belge ID'si olarak aranır. "Personel Ekle"
+         panelinden rolü Yönetim seçilerek oluşturulan hesaplar da buradan
+         girer; onlar için de 2FA akışı devreye girer (kendi totpSecret'ları
+         bu belgede tutulur, admin/main'den bağımsız). */
       const tkDoc = await db.collection("teknikPersonel").doc(lower).get();
       if (tkDoc.exists) {
         const data = tkDoc.data();
         if (String(data.password) !== pw) return this.toast("Kullanıcı adı veya şifre hatalı.", "error");
+        if (data.role === "admin") {
+          this._pendingLoginRef = tkDoc.ref;
+          this._pendingLoginSession = { role: "admin", adminUsername: lower, adminName: data.fullName || lower };
+          if (data.totpEnabled && data.totpSecret) {
+            this.render2faVerify(data.totpSecret);
+          } else {
+            this.render2faSetup();
+          }
+          return;
+        }
         this.session = { role: "teknisyen", technicianId: lower, technicianName: data.fullName || lower };
         localStorage.setItem("avm_session", JSON.stringify(this.session));
         this.tab = "arizalar";
@@ -307,7 +323,8 @@ const App = {
   /* ---------------------------------------------------------------- */
   render2faSetup() {
     this._pendingTotpSecret = TOTP.generateSecret();
-    const uri = TOTP.otpAuthUri(this._pendingTotpSecret, "yonetim");
+    const otpLabel = (this._pendingLoginSession && this._pendingLoginSession.adminUsername) || "yonetim";
+    const uri = TOTP.otpAuthUri(this._pendingTotpSecret, otpLabel);
     this.el.innerHTML = `
       <div class="auth-screen">
         <div class="auth-card">
@@ -335,7 +352,7 @@ const App = {
     const ok = await TOTP.verifyCode(this._pendingTotpSecret, code);
     if (!ok) return this.toast("Kod hatalı, tekrar deneyin.", "error");
     try {
-      await db.collection("admin").doc("main").update({
+      await (this._pendingLoginRef || db.collection("admin").doc("main")).update({
         totpSecret: this._pendingTotpSecret,
         totpEnabled: true
       });
@@ -371,7 +388,9 @@ const App = {
   },
 
   completeAdminLogin() {
-    this.session = { role: "admin" };
+    this.session = this._pendingLoginSession || { role: "admin" };
+    this._pendingLoginRef = null;
+    this._pendingLoginSession = null;
     localStorage.setItem("avm_session", JSON.stringify(this.session));
     this.tab = "anasayfa";
     this.renderAdminShell();
@@ -692,13 +711,14 @@ const App = {
       { key: "magazalar", ic: "🏪", label: "Mağazalar" },
       { key: "arizalar", ic: "🔧", label: "Arızalar" },
       { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
-      { key: "teknikPersonel", ic: "👷", label: "Teknik Personel" },
+      { key: "teknikPersonel", ic: "👷", label: "Personel Ekle" },
       { key: "duyurular", ic: "📣", label: "Duyurular" }
     ];
+    const adminSub = (this.session && this.session.adminName) ? "Yönetici Paneli · " + this.session.adminName : "Yönetici Paneli";
     this.el.innerHTML = `
       <div class="shell">
         <div class="topbar">
-          <div><div class="title">Afium Portal</div><div class="sub">Yönetici Paneli</div></div>
+          <div><div class="title">Afium Portal</div><div class="sub">${escapeHtml(adminSub)}</div></div>
           <div style="display:flex;gap:8px">
             <button class="icon-btn" onclick="App.openAdminSettingsForm()">⚙️</button>
             <button class="icon-btn" onclick="App.logout()">Çıkış</button>
@@ -768,7 +788,7 @@ const App = {
       { key: "magazalar", ic: "🏪", label: "Mağazalar" },
       { key: "arizalar", ic: "🔧", label: "Arızalar" },
       { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
-      { key: "teknikPersonel", ic: "👷", label: "Teknik Personel" },
+      { key: "teknikPersonel", ic: "👷", label: "Personel Ekle" },
       { key: "duyurular", ic: "📣", label: "Duyurular" },
       { key: "tesisBildirim", ic: "🏗️", label: "Tadilat/Sayım Bildirimleri" },
       { key: "arizaRapor", ic: "📊", label: "Arıza Raporu" }
@@ -1116,7 +1136,8 @@ const App = {
 
   adminTeknikPersonelTab(c) {
     c.innerHTML = `
-      <div class="section-title">Teknik Personel</div>
+      <div class="section-title">Personel Ekle</div>
+      <div class="auth-sub" style="text-align:left;margin:-6px 0 14px">Teknik ekip hesabı ya da ek bir Yönetim hesabı oluşturun — rolü aşağıdaki formdan seçersiniz.</div>
       <div id="admin-pers-list"></div>`;
     c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openTeknikPersonelForm()">＋</button>`);
     this.adminTeknikPersonelList(document.getElementById("admin-pers-list"));
@@ -1167,24 +1188,28 @@ const App = {
     }
   },
 
-  /* ---- Teknik Personel (Yönetim'in kendi kaydettiği teknik/bakım ekibi) ----
-     Her teknik personelin artık kendi kullanıcı adı + şifresi var (T.C. ile
-     ilgisi yok — T.C. gizleme sadece mağazadan gelen personel bildirimlerinde
-     kullanılıyor). Kullanıcı adı, Firestore'da belge ID'si olarak tutulur,
-     bu yüzden tekil olmak zorunda ve giriş sırasında doğrudan aranır. */
+  /* ---- Personel Ekle (Yönetim'in kendi kaydettiği teknik ekip VE ek
+     Yönetim hesapları) ----
+     Her personelin kendi kullanıcı adı + şifresi var (T.C. ile ilgisi
+     yok — T.C. gizleme sadece mağazadan gelen personel bildirimlerinde
+     kullanılıyor). Kullanıcı adı, Firestore'da belge ID'si olarak
+     tutulur, bu yüzden tekil olmak zorunda ve giriş sırasında doğrudan
+     aranır. "role" alanı "teknisyen" (varsayılan) veya "admin" olabilir;
+     "admin" seçilirse bu kişi de Yönetim paneline girer ve kendi 2FA'sını
+     kurar — ayrıcalıkları orijinal "yonetim"/"admin" hesabıyla aynıdır. */
   adminTeknikPersonelList(list) {
     const unsub = db.collection("teknikPersonel").onSnapshot((snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
         .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "", "tr"));
       if (docs.length === 0) {
-        list.innerHTML = `<div class="empty-state"><span class="emoji">🔧</span>Henüz teknik personel eklenmedi.<br>Sağ alttaki + butonuyla ekleyin.</div>`;
+        list.innerHTML = `<div class="empty-state"><span class="emoji">🔧</span>Henüz personel eklenmedi.<br>Sağ alttaki + butonuyla ekleyin.</div>`;
         return;
       }
       this._teknikPersonelData = docs;
       list.innerHTML = docs.map((p) => `
         <div class="list-item">
           <div>
-            <div class="list-item-main">${escapeHtml(p.fullName)}</div>
+            <div class="list-item-main">${escapeHtml(p.fullName)} ${p.role === "admin" ? `<span class="badge important" style="margin-left:6px">Yönetim</span>` : `<span class="badge normal" style="margin-left:6px">Teknik Ekip</span>`}</div>
             <div class="list-item-sub">Kullanıcı adı: ${escapeHtml(p.id)}${p.phone ? " · " + escapeHtml(p.phone) : ""}</div>
             <div class="list-item-sub">${p.startDate ? "İşe başlama: " + escapeHtml(p.startDate) : ""}${p.note ? " · " + escapeHtml(p.note) : ""}</div>
           </div>
@@ -1199,8 +1224,15 @@ const App = {
 
   openTeknikPersonelForm(username) {
     const p = username ? (this._teknikPersonelData || []).find(x => x.id === username) : null;
+    const role = p ? (p.role || "teknisyen") : "teknisyen";
     openModal(`
-      <h3>${p ? "Teknik Personeli Düzenle" : "Yeni Teknik Personel Ekle"}</h3>
+      <h3>${p ? "Personeli Düzenle" : "Yeni Personel Ekle"}</h3>
+      <div class="field"><label>Rol</label>
+        <select id="tp-role">
+          <option value="teknisyen" ${role === "teknisyen" ? "selected" : ""}>Teknik Personel</option>
+          <option value="admin" ${role === "admin" ? "selected" : ""}>Yönetim</option>
+        </select>
+      </div>
       <div class="field"><label>Kullanıcı Adı (girişte kullanılır)</label><input id="tp-user" ${p ? "disabled" : ""} value="${p ? escapeHtml(p.id) : ""}" autocapitalize="none" placeholder="Örn: ahmet.teknik" /></div>
       <div class="field"><label>Ad Soyad</label><input id="tp-name" value="${p ? escapeHtml(p.fullName || "") : ""}" placeholder="Ad Soyad" /></div>
       <div class="field"><label>Giriş Şifresi</label><input id="tp-pw" value="${p ? escapeHtml(p.password || "") : ""}" placeholder="Örn: 1234" /></div>
@@ -1212,6 +1244,7 @@ const App = {
   },
 
   async submitTeknikPersonel(isEdit) {
+    const role = document.getElementById("tp-role").value;
     const username = document.getElementById("tp-user").value.trim().toLowerCase();
     const fullName = document.getElementById("tp-name").value.trim();
     const password = document.getElementById("tp-pw").value.trim();
@@ -1219,20 +1252,23 @@ const App = {
     const startDate = document.getElementById("tp-date").value;
     const note = document.getElementById("tp-note").value.trim();
     if (!username || !fullName || !password) return this.toast("Kullanıcı adı, ad soyad ve şifre zorunludur.", "error");
+    if (username === "yonetim" || username === "admin") {
+      return this.toast("Bu kullanıcı adı ayrılmış, lütfen başka bir kullanıcı adı seçin.", "error");
+    }
     try {
       if (isEdit) {
-        await db.collection("teknikPersonel").doc(username).update({ fullName, password, phone, startDate, note });
+        await db.collection("teknikPersonel").doc(username).update({ role, fullName, password, phone, startDate, note });
       } else {
         const existing = await db.collection("teknikPersonel").doc(username).get();
         if (existing.exists) return this.toast("Bu kullanıcı adı zaten kullanılıyor, başka bir tane seçin.", "error");
         await db.collection("teknikPersonel").doc(username).set({
           tenantId: TENANT_ID,
-          fullName, password, phone, startDate, note,
+          role, fullName, password, phone, startDate, note,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
       }
       closeModal();
-      this.toast(isEdit ? "Teknik personel güncellendi." : "Teknik personel eklendi.", "success");
+      this.toast(isEdit ? "Personel güncellendi." : "Personel eklendi.", "success");
     } catch (e) {
       console.error(e);
       this.toast("Kaydedilemedi: " + e.message, "error");
@@ -1240,7 +1276,7 @@ const App = {
   },
 
   async deleteTeknikPersonel(id) {
-    if (!confirm("Bu teknik personeli silmek istediğinize emin misiniz?")) return;
+    if (!confirm("Bu personeli silmek istediğinize emin misiniz?")) return;
     try {
       await db.collection("teknikPersonel").doc(id).delete();
       this.toast("Silindi.", "success");
