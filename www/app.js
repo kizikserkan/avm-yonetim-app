@@ -739,32 +739,24 @@ const App = {
   /* ---------------------------------------------------------------- */
   renderAdminShell() {
     this.clearListeners();
-    const tabs = [
-      { key: "anasayfa", label: "Ana Sayfa" },
-      { key: "magazalar", label: "Mağazalar" },
-      { key: "arizalar", label: "Arızalar" },
-      { key: "magazaPersonel", label: "Mağaza Personeli" },
-      { key: "teknikPersonel", label: "Personel Ekle" },
-      { key: "duyurular", label: "Duyurular" }
-    ];
     const adminSub = (this.session && this.session.adminName) ? "Yönetici Paneli · " + this.session.adminName : "Yönetici Paneli";
+    /* Alt menü kaldırıldı — bölümler arasında gezinme artık tamamen Ana
+       Sayfa'daki kartlar üzerinden yapılıyor. Ana Sayfa dışındaki bir
+       bölümdeyken üstte geri dönüş için "Ana Sayfa" düğmesi gösteriliyor. */
+    const showHomeBtn = this.tab !== "anasayfa";
     this.el.innerHTML = `
       <div class="shell">
         <div class="topbar">
           <div><div class="title">Afium Portal</div><div class="sub">${escapeHtml(adminSub)}</div></div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px">
+            ${showHomeBtn ? '<button class="icon-btn" onclick="App.setAdminTab(\'anasayfa\')">Ana Sayfa</button>' : ""}
             <button class="icon-btn" onclick="App.toggleTheme()">${this.themeToggleLabel()}</button>
             <button class="icon-btn" onclick="App.openAdminSettingsForm()">Ayarlar</button>
             <button class="icon-btn" onclick="App.logout()">Çıkış</button>
           </div>
         </div>
-        <div class="content" id="admin-content"></div>
-        <div class="bottomnav-wrap">
-          <div class="bottomnav">
-            ${tabs.map(t => `<button class="${this.tab === t.key ? "active" : ""}" onclick="App.setAdminTab('${t.key}')">${t.label}</button>`).join("")}
-          </div>
-          <div class="app-footer">Powered by KzkSistem</div>
-        </div>
+        <div class="content content--standalone" id="admin-content"></div>
+        <div class="app-footer-standalone">Powered by KzkSistem</div>
       </div>`;
     this.renderAdminTab();
   },
@@ -987,7 +979,7 @@ const App = {
       <div class="card" id="store-list"></div>
       <div class="section-title" style="margin-top:22px">Şifre Sıfırlama Talepleri</div>
       <div id="pin-reset-list"></div>`;
-    c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openStoreForm()">＋</button>`);
+    c.insertAdjacentHTML("beforeend", `<button class="fab fab--standalone" onclick="App.openStoreForm()">＋</button>`);
     const list = document.getElementById("store-list");
     const unsub = db.collection("stores").onSnapshot((snap) => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
@@ -1175,7 +1167,7 @@ const App = {
       <div class="section-title">Personel Ekle</div>
       <div class="auth-sub" style="text-align:left;margin:-6px 0 14px">Teknik ekip hesabı ya da ek bir Yönetim hesabı oluşturun — rolü aşağıdaki formdan seçersiniz.</div>
       <div id="admin-pers-list"></div>`;
-    c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openTeknikPersonelForm()">＋</button>`);
+    c.insertAdjacentHTML("beforeend", `<button class="fab fab--standalone" onclick="App.openTeknikPersonelForm()">＋</button>`);
     this.adminTeknikPersonelList(document.getElementById("admin-pers-list"));
   },
 
@@ -1334,7 +1326,7 @@ const App = {
         <button class="${this._annView === "expired" ? "active" : ""}" onclick="App.setAnnouncementsView('expired')">Süresi Geçmiş</button>
       </div>
       <div id="admin-ann-list"></div>`;
-    c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openAnnouncementForm()">＋</button>`);
+    c.insertAdjacentHTML("beforeend", `<button class="fab fab--standalone" onclick="App.openAnnouncementForm()">＋</button>`);
     const list = document.getElementById("admin-ann-list");
     const unsub = db.collection("announcements").orderBy("createdAt", "desc").onSnapshot((snap) => {
       const now = Date.now();
