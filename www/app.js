@@ -8,6 +8,7 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 const CATEGORIES = ["Elektrik", "Su Tesisatı", "Klima / Havalandırma", "Asansör / Yürüyen Merdiven", "Temizlik", "Güvenlik", "Diğer"];
+const FACILITY_CATEGORIES = ["Tamirat", "Tadilat", "Sayım", "Diğer"];
 const STATUSES = [
   { key: "acik", label: "Açık", cls: "open" },
   { key: "islemde", label: "İşlemde", cls: "progress" },
@@ -385,7 +386,8 @@ const App = {
     const tabs = [
       { key: "duyurular", ic: "📣", label: "Duyurular" },
       { key: "ariza", ic: "🔧", label: "Arıza" },
-      { key: "personel", ic: "🧑‍💼", label: "Personel" }
+      { key: "personel", ic: "🧑‍💼", label: "Personel" },
+      { key: "tesis", ic: "🏗️", label: "Tadilat/Sayım" }
     ];
     this.el.innerHTML = `
       <div class="shell">
@@ -417,6 +419,7 @@ const App = {
     if (this.tab === "duyurular") this.tenantAnnouncements(c);
     else if (this.tab === "ariza") this.tenantTickets(c);
     else if (this.tab === "personel") this.tenantPersonnel(c);
+    else if (this.tab === "tesis") this.tenantFacilityNotices(c);
   },
 
   tenantAnnouncements(c) {
@@ -611,6 +614,75 @@ const App = {
   },
 
   /* ---------------------------------------------------------------- */
+  /* TADİLAT / TAMİRAT / SAYIM BİLDİRİMİ                                */
+  /* Mağazanın, belirli bir tarih aralığında yapacağı tadilat, tamirat  */
+  /* veya sayım gibi çalışmaları Yönetime bildirmesi için. Arıza        */
+  /* bildiriminden farklı olarak sadece Yönetim görür, bir durum        */
+  /* (açık/işlemde/çözüldü) akışı yoktur — bilgilendirme amaçlıdır.     */
+  /* ---------------------------------------------------------------- */
+  tenantFacilityNotices(c) {
+    c.innerHTML = `
+      <div class="section-title">Tadilat / Tamirat / Sayım Bildirimlerim</div>
+      <div id="fn-list"></div>`;
+    c.insertAdjacentHTML("beforeend", `<button class="fab" onclick="App.openFacilityNoticeForm()">＋</button>`);
+    const list = document.getElementById("fn-list");
+    const unsub = db.collection("facilityNotices").where("storeCode", "==", this.session.storeCode)
+      .onSnapshot((snap) => {
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(belongsToTenant)
+          .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
+        if (docs.length === 0) {
+          list.innerHTML = `<div class="empty-state"><span class="emoji">🏗️</span>Henüz bir tadilat/tamirat/sayım bildiriminiz yok.<br>Sağ alttaki + butonuyla Yönetime bildirin.</div>`;
+          return;
+        }
+        list.innerHTML = docs.map((n) => `
+          <div class="card">
+            <div class="card-row"><div class="card-title">${escapeHtml(n.category)}</div></div>
+            <div class="card-body">${escapeHtml(n.startDate || "-")}${n.endDate ? " – " + escapeHtml(n.endDate) : ""}</div>
+            ${n.description ? `<div class="card-body">${escapeHtml(n.description)}</div>` : ""}
+            <div class="card-meta">Gönderildi: ${this.fmtDate(n.createdAt)}</div>
+          </div>`).join("");
+      }, (err) => { console.error(err); this.toast("Bildirimler yüklenemedi.", "error"); });
+    this.unsubs.push(unsub);
+  },
+
+  openFacilityNoticeForm() {
+    openModal(`
+      <h3>Yeni Tadilat/Tamirat/Sayım Bildirimi</h3>
+      <div class="field"><label>Kategori</label>
+        <select id="fn-cat">${FACILITY_CATEGORIES.map(c => `<option>${c}</option>`).join("")}</select>
+      </div>
+      <div class="field"><label>Başlangıç Tarihi</label><input id="fn-start" type="date" /></div>
+      <div class="field"><label>Bitiş Tarihi (opsiyonel)</label><input id="fn-end" type="date" /></div>
+      <div class="field"><label>Açıklama (opsiyonel)</label><textarea id="fn-desc" placeholder="Varsa ek bilgi..."></textarea></div>
+      <button class="btn" onclick="App.submitFacilityNotice()">Yönetime Bildir</button>
+    `);
+  },
+
+  async submitFacilityNotice() {
+    const category = document.getElementById("fn-cat").value;
+    const startDate = document.getElementById("fn-start").value;
+    const endDate = document.getElementById("fn-end").value;
+    const description = document.getElementById("fn-desc").value.trim();
+    if (!startDate) return this.toast("Lütfen başlangıç tarihini girin.", "error");
+    if (endDate && endDate < startDate) return this.toast("Bitiş tarihi, başlangıç tarihinden önce olamaz.", "error");
+    try {
+      await db.collection("facilityNotices").add({
+        tenantId: TENANT_ID,
+        storeCode: this.session.storeCode,
+        storeName: this.session.storeName,
+        category, startDate, endDate, description,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      closeModal();
+      this.toast("Bildirim Yönetime gönderildi.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast("Gönderilemedi: " + e.message, "error");
+    }
+  },
+
+  /* ---------------------------------------------------------------- */
   /* ADMIN SHELL                                                        */
   /* ---------------------------------------------------------------- */
   renderAdminShell() {
@@ -683,17 +755,23 @@ const App = {
     else if (this.tab === "magazaPersonel") this.adminMagazaPersonelTab(c);
     else if (this.tab === "teknikPersonel") this.adminTeknikPersonelTab(c);
     else if (this.tab === "duyurular") this.adminAnnouncements(c);
+    else if (this.tab === "tesisBildirim") this.adminFacilityNotices(c);
+    else if (this.tab === "arizaRapor") this.adminTicketReport(c);
   },
 
   /* ---- Ana Sayfa (bottom nav'daki bölümlerin büyük kare ikonlarla
-     gösterildiği karşılama ekranı) ---- */
+     gösterildiği karşılama ekranı). Bottom nav'da yer kaplamaması için
+     eklenmeyen, ama sık kullanılmayan iki bölüm de (Tadilat/Sayım
+     bildirimleri, Arıza raporu) buradan tek tıkla açılabiliyor. ---- */
   adminHome(c) {
     const tiles = [
       { key: "magazalar", ic: "🏪", label: "Mağazalar" },
       { key: "arizalar", ic: "🔧", label: "Arızalar" },
       { key: "magazaPersonel", ic: "🧑‍💼", label: "Mağaza Personeli" },
       { key: "teknikPersonel", ic: "👷", label: "Teknik Personel" },
-      { key: "duyurular", ic: "📣", label: "Duyurular" }
+      { key: "duyurular", ic: "📣", label: "Duyurular" },
+      { key: "tesisBildirim", ic: "🏗️", label: "Tadilat/Sayım Bildirimleri" },
+      { key: "arizaRapor", ic: "📊", label: "Arıza Raporu" }
     ];
     c.innerHTML = `
       <div class="section-title">Hoş geldiniz</div>
@@ -704,6 +782,146 @@ const App = {
             <span class="home-tile-label">${t.label}</span>
           </button>`).join("")}
       </div>`;
+  },
+
+  /* ---- Tadilat / Tamirat / Sayım Bildirimleri (mağazalardan gelen,
+     sadece Yönetimin gördüğü bilgilendirme bildirimleri) ---- */
+  adminFacilityNotices(c) {
+    this._fnView = this._fnView || "aktif";
+    c.innerHTML = `
+      <div class="pill-tabs">
+        <button class="${this._fnView === "aktif" ? "active" : ""}" onclick="App.setFacilityNoticesView('aktif')">Aktif / Yaklaşan</button>
+        <button class="${this._fnView === "gecmis" ? "active" : ""}" onclick="App.setFacilityNoticesView('gecmis')">Geçmiş</button>
+      </div>
+      <div id="fn-admin-list"></div>`;
+    const list = document.getElementById("fn-admin-list");
+    const unsub = db.collection("facilityNotices").onSnapshot((snap) => {
+      const today = new Date().toISOString().slice(0, 10);
+      let docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant);
+      docs = docs.filter(n => {
+        const ref = n.endDate || n.startDate || "";
+        const past = ref && ref < today;
+        return this._fnView === "gecmis" ? past : !past;
+      });
+      docs.sort((a, b) => this._fnView === "gecmis"
+        ? (b.startDate || "").localeCompare(a.startDate || "")
+        : (a.startDate || "").localeCompare(b.startDate || ""));
+      if (docs.length === 0) {
+        list.innerHTML = this._fnView === "gecmis"
+          ? `<div class="empty-state"><span class="emoji">🗓️</span>Geçmiş bildirim yok.</div>`
+          : `<div class="empty-state"><span class="emoji">🏗️</span>Aktif veya yaklaşan bir tadilat/tamirat/sayım bildirimi yok.</div>`;
+        return;
+      }
+      list.innerHTML = docs.map((n) => `
+        <div class="card">
+          <div class="card-row"><div class="card-title">${escapeHtml(n.category)}</div><span class="badge normal">${escapeHtml(n.storeName)}</span></div>
+          <div class="card-body">${escapeHtml(n.startDate || "-")}${n.endDate ? " – " + escapeHtml(n.endDate) : ""}</div>
+          ${n.description ? `<div class="card-body">${escapeHtml(n.description)}</div>` : ""}
+          <div class="card-meta">Gönderildi: ${this.fmtDate(n.createdAt)}</div>
+          <button class="icon-action danger" style="margin-top:10px" onclick="App.deleteFacilityNotice('${n.id}')">Bildirimi Kaldır</button>
+        </div>`).join("");
+    }, (err) => { console.error(err); this.toast("Bildirimler yüklenemedi.", "error"); });
+    this.unsubs.push(unsub);
+  },
+
+  setFacilityNoticesView(v) {
+    this._fnView = v;
+    this.renderAdminTab();
+  },
+
+  async deleteFacilityNotice(id) {
+    if (!confirm("Bu bildirimi kaldırmak istediğinize emin misiniz?")) return;
+    try {
+      await db.collection("facilityNotices").doc(id).delete();
+      this.toast("Bildirim kaldırıldı.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast("Kaldırılamadı: " + e.message, "error");
+    }
+  },
+
+  /* ---- Arıza Raporu — seçilen tarih aralığındaki arızaların özeti
+     (toplam sayı, durum dağılımı, kategoriye göre dağılım, ortalama
+     çözüm süresi). Firestore'dan tüm arızalar çekilip istemci
+     tarafında filtrelenir; composite index gerektirmez. ---- */
+  adminTicketReport(c) {
+    const today = new Date().toISOString().slice(0, 10);
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (!this._reportFrom) this._reportFrom = monthAgo;
+    if (!this._reportTo) this._reportTo = today;
+    c.innerHTML = `
+      <div class="section-title">Arıza Raporu</div>
+      <div class="card">
+        <div class="field"><label>Başlangıç Tarihi</label><input id="rp-from" type="date" value="${this._reportFrom}" /></div>
+        <div class="field"><label>Bitiş Tarihi</label><input id="rp-to" type="date" value="${this._reportTo}" /></div>
+        <button class="btn" onclick="App.runTicketReport()">Raporu Göster</button>
+      </div>
+      <div id="rp-result"></div>`;
+    this.runTicketReport();
+  },
+
+  async runTicketReport() {
+    const fromInput = document.getElementById("rp-from");
+    const toInput = document.getElementById("rp-to");
+    if (fromInput) this._reportFrom = fromInput.value;
+    if (toInput) this._reportTo = toInput.value;
+    const from = this._reportFrom, to = this._reportTo;
+    const result = document.getElementById("rp-result");
+    if (!result) return;
+    if (!from || !to) return this.toast("Lütfen başlangıç ve bitiş tarihini seçin.", "error");
+    if (to < from) return this.toast("Bitiş tarihi, başlangıç tarihinden önce olamaz.", "error");
+    result.innerHTML = `<div class="empty-state">Hesaplanıyor…</div>`;
+    try {
+      const snap = await db.collection("tickets").get();
+      const fromMs = new Date(from + "T00:00:00").getTime();
+      const toMs = new Date(to + "T23:59:59").getTime();
+      const docs = snap.docs.map(d => d.data()).filter(belongsToTenant).filter(t => {
+        const ms = tsVal(t.createdAt);
+        return ms >= fromMs && ms <= toMs;
+      });
+      if (docs.length === 0) {
+        result.innerHTML = `<div class="empty-state"><span class="emoji">📊</span>Seçilen tarih aralığında arıza kaydı yok.</div>`;
+        return;
+      }
+      const byStatus = {};
+      STATUSES.forEach(s => byStatus[s.key] = 0);
+      const byCategory = {};
+      let resolvedCount = 0, resolvedDurationSum = 0;
+      docs.forEach(t => {
+        byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+        byCategory[t.category] = (byCategory[t.category] || 0) + 1;
+        if (t.status === "cozuldu" && t.updatedAt) {
+          const dur = tsVal(t.updatedAt) - tsVal(t.createdAt);
+          if (dur >= 0) { resolvedDurationSum += dur; resolvedCount++; }
+        }
+      });
+      const total = docs.length;
+      const avgHours = resolvedCount > 0 ? (resolvedDurationSum / resolvedCount / 3600000).toFixed(1) : null;
+      const statusRows = STATUSES.map(s => {
+        const n = byStatus[s.key] || 0;
+        const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+        return `<div class="card-row"><div>${s.label}</div><div><strong>${n}</strong> (%${pct})</div></div>`;
+      }).join("");
+      const catRows = Object.keys(byCategory).sort((a, b) => byCategory[b] - byCategory[a]).map(cat =>
+        `<div class="card-row"><div>${escapeHtml(cat)}</div><div><strong>${byCategory[cat]}</strong></div></div>`
+      ).join("");
+      result.innerHTML = `
+        <div class="card">
+          <div class="card-title">Toplam Arıza: ${total}</div>
+          <div class="card-meta">${escapeHtml(from)} – ${escapeHtml(to)}</div>
+        </div>
+        <div class="section-title" style="margin-top:18px">Duruma Göre Dağılım</div>
+        <div class="card">${statusRows}</div>
+        <div class="section-title" style="margin-top:18px">Kategoriye Göre Dağılım</div>
+        <div class="card">${catRows}</div>
+        ${avgHours !== null ? `
+        <div class="section-title" style="margin-top:18px">Ortalama Çözüm Süresi</div>
+        <div class="card"><div class="card-row"><div>Çözülen ${resolvedCount} arızanın ortalaması</div><div><strong>${avgHours} saat</strong></div></div></div>` : ""}
+      `;
+    } catch (e) {
+      console.error(e);
+      result.innerHTML = `<div class="empty-state">Rapor hesaplanamadı: ${escapeHtml(e.message)}</div>`;
+    }
   },
 
   /* ---- Mağazalar ---- */
@@ -906,21 +1124,47 @@ const App = {
 
   adminStorePersonnelList(list) {
     const unsub = db.collection("personnel").onSnapshot((snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant)
-        .sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(belongsToTenant);
       if (docs.length === 0) {
         list.innerHTML = `<div class="empty-state"><span class="emoji">🧑‍💼</span>Henüz personel bildirimi yok.</div>`;
         return;
       }
-      list.innerHTML = docs.map((p) => `
-        <div class="card">
-          <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div><span class="badge normal">${escapeHtml(p.storeName)}</span></div>
-          <div class="card-body">T.C.: ${this.tcChip(p.tc)} · Başlama: ${escapeHtml(p.startDate || "-")}</div>
-          ${p.note ? `<div class="card-body">${escapeHtml(p.note)}</div>` : ""}
-          <div class="card-meta">${this.fmtDate(p.createdAt)}</div>
-        </div>`).join("");
+      // Mağaza mağza grupla — her mağazanın çalışanları kendi başlığı altında.
+      const groups = {};
+      docs.forEach(p => {
+        const key = p.storeCode || p.storeName || "—";
+        if (!groups[key]) groups[key] = { storeName: p.storeName || key, items: [] };
+        groups[key].items.push(p);
+      });
+      const storeKeys = Object.keys(groups).sort((a, b) =>
+        groups[a].storeName.localeCompare(groups[b].storeName, "tr"));
+      list.innerHTML = storeKeys.map(key => {
+        const g = groups[key];
+        g.items.sort((a, b) => tsVal(b.createdAt) - tsVal(a.createdAt));
+        return `
+          <div class="group-header">🏪 ${escapeHtml(g.storeName)}</div>
+          ${g.items.map((p) => `
+            <div class="card">
+              <div class="card-row"><div class="card-title">${escapeHtml(p.fullName)}</div></div>
+              <div class="card-body">T.C.: ${this.tcChip(p.tc)} · Başlama: ${escapeHtml(p.startDate || "-")}</div>
+              ${p.note ? `<div class="card-body">${escapeHtml(p.note)}</div>` : ""}
+              <div class="card-meta">${this.fmtDate(p.createdAt)}</div>
+              <button class="icon-action danger" style="margin-top:10px" onclick="App.deleteStorePersonnel('${p.id}')">Çıkan Personeli Sil</button>
+            </div>`).join("")}`;
+      }).join("");
     }, (err) => { console.error(err); this.toast("Kayıtlar yüklenemedi.", "error"); });
     this.unsubs.push(unsub);
+  },
+
+  async deleteStorePersonnel(id) {
+    if (!confirm("Bu personel kaydını silmek istediğinize emin misiniz? (Örn. işten ayrıldıysa)")) return;
+    try {
+      await db.collection("personnel").doc(id).delete();
+      this.toast("Personel kaydı silindi.", "success");
+    } catch (e) {
+      console.error(e);
+      this.toast("Silinemedi: " + e.message, "error");
+    }
   },
 
   /* ---- Teknik Personel (Yönetim'in kendi kaydettiği teknik/bakım ekibi) ----
