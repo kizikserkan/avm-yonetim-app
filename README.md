@@ -405,6 +405,37 @@ doğrulama uygulamasından alınan 6 haneli kod.
 - Bu özellik yalnızca **Yönetim girişi** içindir, mağaza ve Teknik Ekip
   girişlerinde 2FA yoktur.
 
+### Mağaza Personeli — mağaza mağaza gruplama ve silme
+
+Yönetim panelindeki **Mağaza Personeli** listesi artık tek bir uzun liste
+değil, her mağazanın kendi başlığı altında gruplanıyor. Her kayıtta
+artık bir **"Çıkan Personeli Sil"** butonu var — bir çalışan işten
+ayrıldığında kaydını buradan kaldırabilirsiniz (geri alınamaz, silmeden
+önce onay istenir).
+
+### Tadilat / Tamirat / Sayım Bildirimi
+
+Mağaza panelinde yeni bir **"Tadilat/Sayım"** sekmesi var. Mağazalar
+buradan, yapacakları tadilat, tamirat veya sayım gibi çalışmaları
+(kategori, başlangıç/bitiş tarihi, opsiyonel açıklama) Yönetime
+bildirebilir. Bu bildirimler arıza gibi bir durum akışına (açık/işlemde/
+çözüldü) sahip değildir, sadece bilgilendirme amaçlıdır ve **sadece
+Yönetim** görür (diğer mağazalara görünmez).
+
+Yönetim bu bildirimleri **Ana Sayfa → Tadilat/Sayım Bildirimleri**
+kısmından görür. **"Aktif / Yaklaşan"** ve **"Geçmiş"** olarak iki
+sekmeye ayrılır (bitiş tarihi — yoksa başlangıç tarihi — bugünden
+önceyse "Geçmiş" sayılır). Gerekirse bir bildirim buradan kaldırılabilir.
+
+### Arıza Raporu
+
+Yönetim, **Ana Sayfa → Arıza Raporu** kısmından seçtiği bir tarih
+aralığındaki arızaların özetini görebilir: toplam arıza sayısı, duruma
+göre dağılım (Açık/İşlemde/Çözüldü ve yüzdeleri), kategoriye göre
+dağılım ve çözülen arızaların ortalama çözüm süresi (saat cinsinden).
+Varsayılan olarak son 30 günü gösterir, tarihleri değiştirip "Raporu
+Göster"e basarak farklı bir aralık sorgulayabilirsiniz.
+
 ---
 
 ## Güncelleme yapmak isterseniz
